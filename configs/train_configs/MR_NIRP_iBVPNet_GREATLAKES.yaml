@@ -11,7 +11,7 @@ TRAIN:
     DATASET: MR_NIRP
     DO_PREPROCESS: True                # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP_PreprocessedData"     # Raw dataset path, need to be updated
+    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP"     # Raw dataset path, need to be updated
     CACHED_PATH: "/scratch/mni_root/mni0/shared_data/MR_NIRP_NPY"     # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
@@ -42,7 +42,7 @@ VALID:
     DATASET: MR_NIRP
     DO_PREPROCESS: True                # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP_PreprocessedData"    # Raw dataset path, need to be updated
+    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP"    # Raw dataset path, need to be updated
     CACHED_PATH: "/scratch/mni_root/mni0/shared_data/MR_NIRP_NPY"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.7
@@ -75,7 +75,7 @@ TEST:
     DATASET: MR_NIRP
     DO_PREPROCESS: True                  # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP_PreprocessedData"    # Raw dataset path, need to be updated
+    DATA_PATH: "/scratch/mni_root/mni0/shared_data/MR-NIRP"    # Raw dataset path, need to be updated
     CACHED_PATH: "/scratch/mni_root/mni0/shared_data/MR_NIRP_NPY"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.9
