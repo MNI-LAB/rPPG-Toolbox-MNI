@@ -388,6 +388,7 @@ class BaseLoader(Dataset):
         # Frame Resizing
         total_frames, _, _, channels = frames.shape
         resized_frames = np.zeros((total_frames, height, width, channels))
+        print(f'resized frame dimension: {resized_frames.shape}')
         for i in range(0, total_frames):
             frame = frames[i]
             if use_dynamic_detection:  # use the (i // detection_freq)-th facial region.
@@ -484,7 +485,7 @@ class BaseLoader(Dataset):
             file_list_dict(Dict): Dictionary containing information regarding processed data ( path names)
         """
         print('Preprocessing dataset...')
-        print(f'data_dirs: {data_dirs}')
+        # print(f'data_dirs: {data_dirs}')
         file_num = len(data_dirs)
         choose_range = range(0, file_num)
         pbar = tqdm(list(choose_range))
@@ -501,12 +502,14 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    p = mp.Process(target=self.preprocess_dataset_subprocess, 
-                                args=(data_dirs,config_preprocess, i, file_list_dict))
-                    p.start()
-                    p_list.append(p)
-                    running_num += 1
+                    # p = mp.Process(target=self.preprocess_dataset_subprocess, 
+                    #             args=(data_dirs,config_preprocess, i, file_list_dict))
+                    # single thread version for debugging
+                    # p.start()
+                    # p_list.append(p)
+                    # running_num += 1
                     process_flag = False
+                    self.preprocess_dataset_subprocess(data_dirs, config_preprocess, i, file_list_dict)
                 for p_ in p_list:
                     if not p_.is_alive():
                         p_list.remove(p_)

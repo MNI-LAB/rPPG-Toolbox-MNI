@@ -23,7 +23,7 @@ TRAIN:
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:
-        DO_CROP_FACE: True
+        DO_CROP_FACE: False
         BACKEND: 'HC'    # HC for Haar Cascade, Y5F for YOLO5Face
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
@@ -54,7 +54,7 @@ VALID:
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:
-        DO_CROP_FACE: True
+        DO_CROP_FACE: False
         BACKEND: 'HC'    # HC for Haar Cascade, Y5F for YOLO5Face
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
@@ -86,7 +86,7 @@ TEST:
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:
-        DO_CROP_FACE: True
+        DO_CROP_FACE: False
         BACKEND: 'HC'    # HC for Haar Cascade, Y5F for YOLO5Face
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5

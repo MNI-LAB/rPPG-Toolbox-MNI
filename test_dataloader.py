@@ -3,6 +3,8 @@ from dataset import data_loader
 from config import get_config
 import argparse
 from neural_methods import trainer
+import warnings
+warnings.filterwarnings("ignore")
 
 def add_args(parser):
     """Adds arguments for parser."""
@@ -29,18 +31,21 @@ def add_args(parser):
     '''
     return parser
 
-parser = argparse.ArgumentParser()
-parser = add_args(parser)
-parser = trainer.BaseTrainer.BaseTrainer.add_trainer_args(parser)
-parser = data_loader.BaseLoader.BaseLoader.add_data_loader_args(parser)
-args = parser.parse_args()
+if __name__ == "__main__":
 
-config = get_config(args)
-print('Configuration:')
-print(config, end='\n\n')
-train_data_loader = MRNIRPLoader(
-    name="train",
-    data_path=config.TRAIN.DATA.DATA_PATH,
-    config_data=config.TRAIN.DATA,
-    device=config.DEVICE)
+
+  parser = argparse.ArgumentParser()
+  parser = add_args(parser)
+  parser = trainer.BaseTrainer.BaseTrainer.add_trainer_args(parser)
+  parser = data_loader.BaseLoader.BaseLoader.add_data_loader_args(parser)
+  args = parser.parse_args()
+
+  config = get_config(args)
+  # print('Configuration:')
+  # print(config, end='\n\n')
+  train_data_loader = MRNIRPLoader(
+      name="train",
+      data_path=config.TRAIN.DATA.DATA_PATH,
+      config_data=config.TRAIN.DATA,
+      device=config.DEVICE)
     
