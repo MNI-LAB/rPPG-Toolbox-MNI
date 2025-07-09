@@ -99,7 +99,7 @@ class MRNIRPLoader(BaseLoader):
         pulseOxTime = np.array(pulseOxTime, dtype=np.float32)
         
         numPulseSample = pkl['numPulseSample']
-        
+        print(f'Loaded {clip_name} with {len(pulseOxRecord)} PPG samples')
         # mat file (not needed)
         # mat_file = os.path.join(pulseox_path, 'pulseOx.mat')
         # mat = scipy.io.loadmat(mat_file)
