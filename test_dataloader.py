@@ -1,4 +1,4 @@
-from MRNIRPLoader import MRNIRPLoader
+from dataset.data_loader.MRNIRPLoader import MRNIRPLoader
 from dataset import data_loader
 from config import get_config
 import argparse
@@ -47,5 +47,6 @@ if __name__ == "__main__":
       name="train",
       data_path=config.TRAIN.DATA.DATA_PATH,
       config_data=config.TRAIN.DATA,
-      device=config.DEVICE)
+      # device=config.DEVICE
+  )
     

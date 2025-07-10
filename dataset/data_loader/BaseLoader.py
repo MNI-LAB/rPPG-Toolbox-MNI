@@ -388,9 +388,10 @@ class BaseLoader(Dataset):
         # Frame Resizing
         total_frames, _, _, channels = frames.shape
         resized_frames = np.zeros((total_frames, height, width, channels))
-        print(f'resized frame dimension: {resized_frames.shape}')
+        # print(f'resized frame dimension: {resized_frames.shape}')
         for i in range(0, total_frames):
             frame = frames[i]
+            # print(f'frame shape: {frame.shape}')
             if use_dynamic_detection:  # use the (i // detection_freq)-th facial region.
                 reference_index = i // detection_freq
             else:  # use the first region obtrained from the first frame.
@@ -402,7 +403,10 @@ class BaseLoader(Dataset):
                     face_region = face_region_all[reference_index]
                 frame = frame[max(face_region[1], 0):min(face_region[1] + face_region[3], frame.shape[0]),
                         max(face_region[0], 0):min(face_region[0] + face_region[2], frame.shape[1])]
-            resized_frames[i] = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+            resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+            if resized.ndim == 2:  # grayscale image
+                resized = resized[..., np.newaxis]  # shape (H, W, 1)
+            resized_frames[i] = resized
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):
@@ -474,7 +478,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -502,14 +506,15 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    # p = mp.Process(target=self.preprocess_dataset_subprocess, 
-                    #             args=(data_dirs,config_preprocess, i, file_list_dict))
+                    p = mp.Process(target=self.preprocess_dataset_subprocess, 
+                                args=(data_dirs,config_preprocess, i, file_list_dict))
                     # single thread version for debugging
-                    # p.start()
-                    # p_list.append(p)
-                    # running_num += 1
+                    p.start()
+                    p_list.append(p)
+                    running_num += 1
                     process_flag = False
-                    self.preprocess_dataset_subprocess(data_dirs, config_preprocess, i, file_list_dict)
+                    # self.preprocess_dataset_subprocess(data_dirs, config_preprocess, i, file_list_dict)
+                    # pbar.update(1)
                 for p_ in p_list:
                     if not p_.is_alive():
                         p_list.remove(p_)
