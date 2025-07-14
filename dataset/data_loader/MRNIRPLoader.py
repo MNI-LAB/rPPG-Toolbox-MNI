@@ -124,6 +124,8 @@ class MRNIRPLoader(BaseLoader):
         # --- read NIR frames ---
         nir_files = sorted(glob.glob(os.path.join(nir_path, 'Frame*.pgm')))
         nir_files = nir_files[:fps*clip_length]
+        # Remove all odd frames (keep even indices: 0, 2, 4, ...)
+        nir_files = nir_files[::2]
         # print(f'Found {len(nir_files)} NIR frames in {nir_path}')
         nir_frames = []
         # for f in tqdm(nir_files, desc="Loading NIR .pgm frames"):
@@ -136,6 +138,46 @@ class MRNIRPLoader(BaseLoader):
             nir_frames.append(img)
         
         nir_frames = np.stack(nir_frames, axis=0).astype(np.float32)
+        fps = 15
+        if i == 0:
+            # Save PPG waveform as a matplotlib plot
+            import matplotlib.pyplot as plt
+            ppg_plot_path = f"{clip_name}_ppg.png"
+            plt.figure(figsize=(10, 3))
+            plt.plot(ppg)
+            plt.title(f"PPG waveform: {clip_name}")
+            plt.xlabel("Frame")
+            plt.ylabel("Amplitude")
+            plt.tight_layout()
+            plt.savefig(ppg_plot_path)
+            plt.close()
+
+            # Save NIR frames as an AVI video (more robust)
+            video_path = f"{clip_name}_nir.avi"
+            height, width = nir_frames.shape[1:3]
+            out = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*'MJPG'), fps, (width, height), isColor=True)
+            j = 0 
+            for frame in nir_frames:
+                frame = frame.squeeze()  # (H, W)
+
+                # Normalize if needed
+                if frame.dtype == np.float32 and (frame.max() > 255 or frame.min() < 0):
+                    frame = 255 * (frame - frame.min()) / (frame.max() - frame.min() + 1e-8)
+
+                frame_uint8 = np.clip(frame, 0, 255).astype(np.uint8)
+
+                # Enforce 3-channel RGB format
+                if frame_uint8.ndim == 2:
+                    frame_rgb = cv2.cvtColor(frame_uint8, cv2.COLOR_GRAY2BGR)
+                else:
+                    frame_rgb = frame_uint8
+                out.write(frame_rgb)
+                cv2.imwrite(f"debug_frames/debug_frame_{j}.png", frame_rgb)
+                j += 1
+                
+
+            out.release()
+            print(f"Saved AVI video: {video_path}")
         
         # --- preprocess and save ---
         # print(f'Frame shape: {nir_frames.shape}, Labels shape: {ppg.shape}')
