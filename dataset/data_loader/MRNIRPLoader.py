@@ -7,8 +7,11 @@ import scipy.io
 import cv2
 import numpy as np
 import scipy.io
+import matplotlib.pyplot as plt
 from dataset.data_loader.BaseLoader import BaseLoader
 from tqdm import tqdm
+from PIL import ImageStat, Image
+
 
 
 def load_pulseox_mat(mat_path):
@@ -98,8 +101,8 @@ class MRNIRPLoader(BaseLoader):
         pulseox_path = clip['pulseox_dir']
         
         # NOTE: need to put this into .yaml file!!!!!
-        clip_length = 120 # 2 min clip
-        fps = 30  
+        clip_length = 60 # 1 min clip
+        fps = 30
                 
         # --- load full PPG log and values --- 
         # Look for either 'pulseOx.mat' or 'pulseOX.mat'
@@ -116,19 +119,27 @@ class MRNIRPLoader(BaseLoader):
         timestamps = (mat['pulseOxTime'][0] - mat['pulseOxTime'][0][0])
         # print(f'ppg shape: {ppg.shape}')
         # print(f'timestamp shape: {timestamps.shape}')
-        ppg = self.correct_irregular_sampling(ppg, timestamps)
+        ppg = self.correct_irregular_sampling(ppg, timestamps, target_fs=fps)
         ppg = ppg[:fps*clip_length]
-        
-        
         
         # --- read NIR frames ---
         nir_files = sorted(glob.glob(os.path.join(nir_path, 'Frame*.pgm')))
-        nir_files = nir_files[:fps*clip_length]
-        # Remove all odd frames (keep even indices: 0, 2, 4, ...)
-        nir_files = nir_files[::2]
-        # print(f'Found {len(nir_files)} NIR frames in {nir_path}')
+        nir_files = nir_files[:fps*clip_length*2] # x2 to filter out the black frames
+        
+        # check if to skip first or 2nd frame
+        im = Image.open(nir_files[0]).convert('L')
+        brightness = ImageStat.Stat(im)
+        if brightness.mean[0] > 20:
+            nir_files = nir_files[::2]
+        else:
+            nir_files = nir_files[1::2]
+        
+        if len(nir_files) != len(ppg):
+            common_length = min(len(nir_files), len(ppg))
+            nir_files = nir_files[:common_length]
+            ppg = ppg[:common_length]
+        
         nir_frames = []
-        # for f in tqdm(nir_files, desc="Loading NIR .pgm frames"):
         for f in nir_files:
             img = cv2.imread(f, cv2.IMREAD_UNCHANGED)
             if img is None:
@@ -138,46 +149,70 @@ class MRNIRPLoader(BaseLoader):
             nir_frames.append(img)
         
         nir_frames = np.stack(nir_frames, axis=0).astype(np.float32)
-        fps = 15
-        if i == 0:
-            # Save PPG waveform as a matplotlib plot
-            import matplotlib.pyplot as plt
-            ppg_plot_path = f"{clip_name}_ppg.png"
-            plt.figure(figsize=(10, 3))
-            plt.plot(ppg)
-            plt.title(f"PPG waveform: {clip_name}")
-            plt.xlabel("Frame")
-            plt.ylabel("Amplitude")
-            plt.tight_layout()
-            plt.savefig(ppg_plot_path)
-            plt.close()
+        # print(f'nir_frames shape: {nir_frames.shape}')
+        # Save PPG waveform as a matplotlib plot
+        # ppg_plot_path = f"debug_frames/{clip_name}_ppg.png"
+        # plt.figure(figsize=(10, 3))
+        # plt.plot(ppg)
+        # plt.title(f"PPG waveform: {clip_name}")
+        # plt.xlabel("Frame")
+        # plt.ylabel("Amplitude")
+        # plt.tight_layout()
+        # plt.savefig(ppg_plot_path)
+        # plt.close()
+        
+        # if i == 0:
+        #     # Save PPG waveform as a matplotlib plot
+        #     ppg_plot_path = f"{clip_name}_ppg.png"
+        #     plt.figure(figsize=(10, 3))
+        #     plt.plot(ppg)
+        #     plt.title(f"PPG waveform: {clip_name}")
+        #     plt.xlabel("Frame")
+        #     plt.ylabel("Amplitude")
+        #     plt.tight_layout()
+        #     plt.savefig(ppg_plot_path)
+        #     plt.close()
 
-            # Save NIR frames as an AVI video (more robust)
-            video_path = f"{clip_name}_nir.avi"
-            height, width = nir_frames.shape[1:3]
-            out = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*'MJPG'), fps, (width, height), isColor=True)
-            j = 0 
-            for frame in nir_frames:
-                frame = frame.squeeze()  # (H, W)
+        #     # Save NIR frames as an AVI video (more robust)
+        #     video_path = f"{clip_name}_nir.avi"
+        #     height, width = nir_frames.shape[1:3]
+        #     out = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*'MJPG'), fps, (width, height), isColor=True)
+        #     j = 0 
+        #     for frame in nir_frames:
+        #         frame = frame.squeeze()  # (H, W)
 
-                # Normalize if needed
-                if frame.dtype == np.float32 and (frame.max() > 255 or frame.min() < 0):
-                    frame = 255 * (frame - frame.min()) / (frame.max() - frame.min() + 1e-8)
+        #         # Normalize if needed
+        #         if frame.dtype == np.float32 and (frame.max() > 255 or frame.min() < 0):
+        #             frame = 255 * (frame - frame.min()) / (frame.max() - frame.min() + 1e-8)
 
-                frame_uint8 = np.clip(frame, 0, 255).astype(np.uint8)
+        #         frame_uint8 = np.clip(frame, 0, 255).astype(np.uint8)
 
-                # Enforce 3-channel RGB format
-                if frame_uint8.ndim == 2:
-                    frame_rgb = cv2.cvtColor(frame_uint8, cv2.COLOR_GRAY2BGR)
-                else:
-                    frame_rgb = frame_uint8
-                out.write(frame_rgb)
-                cv2.imwrite(f"debug_frames/debug_frame_{j}.png", frame_rgb)
-                j += 1
+        #         # Enforce 3-channel RGB format
+        #         if frame_uint8.ndim == 2:
+        #             frame_rgb = cv2.cvtColor(frame_uint8, cv2.COLOR_GRAY2BGR)
+        #         else:
+        #             frame_rgb = frame_uint8
+        #         out.write(frame_rgb)
+        #         # cv2.imwrite(f"debug_frames/debug_frame_{j}.png", frame_rgb)
+        #         j += 1
                 
 
-            out.release()
-            print(f"Saved AVI video: {video_path}")
+        #     out.release()
+        #     print(f"Saved AVI video: {video_path}")
+
+        # Normalize if needed
+        frame = nir_frames[0]
+        if frame.dtype == np.float32 and (frame.max() > 255 or frame.min() < 0):
+            frame = 255 * (frame - frame.min()) / (frame.max() - frame.min() + 1e-8)
+
+        frame_uint8 = np.clip(frame, 0, 255).astype(np.uint8)
+
+        # Enforce 3-channel RGB format
+        if frame_uint8.ndim == 2:
+            frame_rgb = cv2.cvtColor(frame_uint8, cv2.COLOR_GRAY2BGR)
+        else:
+            frame_rgb = frame_uint8
+        cv2.imwrite(f"debug_frames/file_{clip_name}_frame0.png", frame_rgb)
         
         # --- preprocess and save ---
         # print(f'Frame shape: {nir_frames.shape}, Labels shape: {ppg.shape}')
