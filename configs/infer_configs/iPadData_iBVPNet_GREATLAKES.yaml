@@ -35,7 +35,7 @@ TEST:
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 LOG:
-  PATH: runs/exp
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/ipad_exp
 MODEL:
   DROP_RATE: 0.2
   NAME: iBVPNet
