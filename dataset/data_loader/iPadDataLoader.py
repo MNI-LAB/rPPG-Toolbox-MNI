@@ -125,6 +125,7 @@ class iPadDataLoader(BaseLoader):
         """Reads a rgb video file, extracts green channel only, returns frames(T, H, W, 1) """
         frames = list()
         all_png = sorted(glob.glob(video_file + "video/" + '*.png'))
+        all_depth = sorted(glob.glob(video_file + "depth/" + '*.png'))
         num_frames = len(all_png)
         if num_frames < 600:
             print(f'Warning: current clip has insufficient # of frames: {num_frames}')
@@ -132,17 +133,56 @@ class iPadDataLoader(BaseLoader):
         i = 0
         while i < num_frames:
             img = cv2.imread(all_png[i])
-            if img is None:
+            depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
+            depth = depth[:, :, 0]
+            depth = depth.reshape(depth.shape[0], depth.shape[1], 1)
+            if img is None or depth is None:
                 print(f"Warning: failed to read {all_png[i]}")
                 i += 1
                 continue
-            green = img[:, :, 1]  # Extract green channel
-            green = green[:, :, np.newaxis]  # Expand to (H, W, 1) for consistency
-            frames.append(green)
+            # === Extract green channel only ===
+            # green = img[:, :, 1]  # Extract green channel
+            # green = green[:, :, np.newaxis]  # Expand to (H, W, 1) for consistency
+            # frames.append(green)
+            # === RGBD ===
+            rgbd = np.concatenate((img, depth), axis=2)
+            frames.append(rgbd)
             i += 1
         frames = np.asarray(frames)
         return frames
-
+    @staticmethod
+    def read_video(video_file):
+        """Reads a rgb video file and depth video file, returns frames(T, H, W, 4) """
+        frames = list()
+        all_png = sorted(glob.glob(video_file + "video/" + '*.png'))
+        all_depth = sorted(glob.glob(video_file + "depth/" + '*.png'))
+        i = 0
+        num_frames = min(len(all_png), len(all_depth))
+        # print(num_frames)
+        while i < num_frames:
+            img = cv2.imread(all_png[i])
+            depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
+            depth = depth[:, :, 0]
+            depth = depth.reshape(depth.shape[0], depth.shape[1], 1)
+            
+            #resize img to depth's shape
+            img = cv2.resize(img, (depth.shape[1], depth.shape[0]))
+            # if i == 0:
+            #     print(f'img shape: {img.shape}, depth shape: {depth.shape}')
+            #     cv2.imshow('img', img)
+            #     cv2.imshow('depth', depth)
+            #     cv2.waitKey(1)
+            # stack rgb and depth
+            
+            rgbd = np.concatenate((img, depth), axis=2)
+            frames.append(rgbd)
+            # print(f'frame {i}')
+            # cv2.imshow('frame', img)
+            # cv2.imshow('depth', depth)
+            # cv2.waitKey(1)
+            i += 1
+        # print('finish 1 clip')
+        return np.asarray(frames)
     @staticmethod
     def read_wave(bvp_file):
         with open(bvp_file, "r") as f:
