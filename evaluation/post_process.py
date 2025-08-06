@@ -45,6 +45,18 @@ def _calculate_fft_hr(ppg_signal, fs=60, low_pass=0.6, high_pass=3.3):
     fft_hr = np.take(mask_ppg, np.argmax(mask_pxx, 0))[0] * 60
     return fft_hr
 
+
+def _calculate_fft_hr_label(ppg_signal, fs=30, low_pass=0.6, high_pass=3.3):
+    freqs = np.fft.rfftfreq(len(ppg_signal), 1.0/fs) * 60
+    fft_mag = np.abs(np.fft.rfft(ppg_signal))
+    hr_mask = (freqs >= 50) & (freqs <= 150)
+    if np.any(hr_mask):
+        peak_hr = freqs[hr_mask][np.argmax(fft_mag[hr_mask])]
+        print(f"  Estimated HR: {peak_hr:.1f} BPM")    
+    
+    return peak_hr if np.any(hr_mask) else None
+    
+
 def _calculate_peak_hr(ppg_signal, fs):
     """Calculate heart rate based on PPG using peak detection."""
     ppg_peaks, _ = scipy.signal.find_peaks(ppg_signal)
@@ -153,7 +165,7 @@ def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_b
 
     if hr_method == 'FFT':
         hr_pred = _calculate_fft_hr(predictions, fs=fs)
-        hr_label = _calculate_fft_hr(labels, fs=fs)
+        hr_label = _calculate_fft_hr_label(labels, fs=fs)
     elif hr_method == 'Peak':
         hr_pred = _calculate_peak_hr(predictions, fs=fs)
         hr_label = _calculate_peak_hr(labels, fs=fs)

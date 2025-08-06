@@ -15,7 +15,7 @@ TEST:
     END: 1.0
     PREPROCESS:
       DATA_TYPE: ['Raw']         #if use iBVPNet, should be Raw
-      LABEL_TYPE: Standardized
+      LABEL_TYPE: Raw
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:

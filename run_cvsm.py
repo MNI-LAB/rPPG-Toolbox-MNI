@@ -377,6 +377,29 @@ class FaceProcessing:
         compensated_ppg_signal = self.Depth_compensation(ppg_signal_g, depth_signal, time_window_sec, self.fps)
         
         return compensated_ppg_signal
+    
+    
+def debug_chunks(signal, chunk_len):
+    num_chunks = len(signal) // chunk_len
+    for i in range(num_chunks):
+        start = i * chunk_len
+        end = start + chunk_len
+        chunk = signal[start:end]
+        
+        print(f"Chunk {i}:")
+        print(f"  Mean: {np.mean(chunk):.2f}")
+        print(f"  Std: {np.std(chunk):.2f}")
+        print(f"  Min/Max: {np.min(chunk):.2f}/{np.max(chunk):.2f}")
+        print(f"  Non-zero values: {np.count_nonzero(chunk)}/{len(chunk)}")
+        
+        # Quick HR estimate
+        freqs = np.fft.rfftfreq(len(chunk), 1.0/fps) * 60
+        fft_mag = np.abs(np.fft.rfft(chunk))
+        hr_mask = (freqs >= 50) & (freqs <= 150)
+        if np.any(hr_mask):
+            peak_hr = freqs[hr_mask][np.argmax(fft_mag[hr_mask])]
+            print(f"  Estimated HR: {peak_hr:.1f} BPM")
+        print()
 
 # --- Main Script Execution ---
 
@@ -464,7 +487,7 @@ if __name__ == "__main__":
 
     # data_dir_full = ipadDataLoader.split_raw_data(all_dirs_with_index, begin=0.8, end=1.0)
     data_dir = [d['path'] for d in all_dirs_with_index]
-    data_dir = data_dir[:2]
+    # data_dir = data_dir[:2]
     data_dir.sort()
     print(f'All data directories found: {data_dir}')
     all_predictions = {}
@@ -485,7 +508,7 @@ if __name__ == "__main__":
         
         # Process video and extract PPG signal in single loop
         compensated_ppg_signal = face_processor.predict(clip_path)
-
+        chunk_len = len(compensated_ppg_signal) if compensated_ppg_signal.size > 0 else 0
         if compensated_ppg_signal.size > 0:
             # Ensure both signals have the same length
             min_length = min(len(compensated_ppg_signal), len(gt_bvp_wave))
@@ -495,6 +518,9 @@ if __name__ == "__main__":
             # Convert to chunked format for metrics calculation
             predictions_chunks = chunk_signals(compensated_ppg_signal, chunk_len, config.DEVICE)
             labels_chunks = chunk_signals(gt_bvp_wave, chunk_len, config.DEVICE)
+            
+            # debug label chunks
+            # debug_chunks(gt_bvp_wave, chunk_len)
             
             # Only add if chunks were created (signal was long enough)
             if predictions_chunks:

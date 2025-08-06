@@ -19,7 +19,7 @@ TRAIN:
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized','Standardized']
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: DiffNormalized
+      LABEL_TYPE: Raw
       DO_CHUNK: True
       CHUNK_LENGTH: 180
       CROP_FACE:
@@ -48,7 +48,7 @@ VALID:
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: DiffNormalized
+      LABEL_TYPE: Raw
       DO_CHUNK: True
       CHUNK_LENGTH: 180
       CROP_FACE:
@@ -78,7 +78,7 @@ TEST:
     END: 1.0
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE: DiffNormalized
+      LABEL_TYPE: Raw
       DO_CHUNK: True
       CHUNK_LENGTH: 180
       CROP_FACE:

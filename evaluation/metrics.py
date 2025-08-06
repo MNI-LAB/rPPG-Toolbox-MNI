@@ -42,6 +42,29 @@ def _reform_data_from_dict(data, flatten=True):
     return sort_data
 
 
+def calc_gt_hr(signal, chunk_len, fps=30):
+    num_chunks = len(signal) // chunk_len
+    for i in range(num_chunks):
+        start = i * chunk_len
+        end = start + chunk_len
+        chunk = signal[start:end]
+        
+        print(f"Chunk {i}:")
+        print(f"  Mean: {np.mean(chunk):.2f}")
+        print(f"  Std: {np.std(chunk):.2f}")
+        print(f"  Min/Max: {np.min(chunk):.2f}/{np.max(chunk):.2f}")
+        print(f"  Non-zero values: {np.count_nonzero(chunk)}/{len(chunk)}")
+        
+        # Quick HR estimate
+        freqs = np.fft.rfftfreq(len(chunk), 1.0/fps) * 60
+        fft_mag = np.abs(np.fft.rfft(chunk))
+        hr_mask = (freqs >= 50) & (freqs <= 150)
+        if np.any(hr_mask):
+            peak_hr = freqs[hr_mask][np.argmax(fft_mag[hr_mask])]
+            print(f"  Estimated HR: {peak_hr:.1f} BPM")
+        print()
+        
+
 def calculate_metrics(predictions, labels, config):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
     predict_hr_fft_all = list()
@@ -88,7 +111,7 @@ def calculate_metrics(predictions, labels, config):
                 MACC_all.append(macc)
             elif config.INFERENCE.EVALUATION_METHOD == "FFT":
                 gt_hr_fft, pred_hr_fft, SNR, macc = calculate_metric_per_video(
-                    pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
+                    pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')                
                 gt_hr_fft_all.append(gt_hr_fft)
                 predict_hr_fft_all.append(pred_hr_fft)
                 SNR_all.append(SNR)

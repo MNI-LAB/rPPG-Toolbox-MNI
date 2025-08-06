@@ -15,7 +15,7 @@ TEST:
     END: 1.0
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE: DiffNormalized
+      LABEL_TYPE: Raw
       DO_CHUNK: True
       CHUNK_LENGTH: 180
       CROP_FACE:
