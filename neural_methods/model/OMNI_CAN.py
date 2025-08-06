@@ -59,7 +59,7 @@ class TSM(nn.Module):
 
 class OMNICAN(nn.Module):
 
-    def __init__(self, in_channels=3, depth_channels=1, nb_filters1=32, nb_filters2=64, kernel_size=3, dropout_rate1=0.25,
+    def __init__(self, in_channels=1, depth_channels=1, nb_filters1=32, nb_filters2=64, kernel_size=3, dropout_rate1=0.25,
                  dropout_rate2=0.5, pool_size=(2, 2), nb_dense=128, frame_depth=20, img_size=36):
         """Definition of OMNICAN.
         Args:

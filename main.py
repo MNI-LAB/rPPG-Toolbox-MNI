@@ -10,6 +10,7 @@ from config import get_config
 from dataset import data_loader
 from neural_methods import trainer
 from unsupervised_methods.unsupervised_predictor import unsupervised_predict
+from classical_methods.CVSMTest import CVSMTrainer
 from torch.utils.data import DataLoader
 
 RANDOM_SEED = 100
@@ -114,7 +115,9 @@ def test(config, data_loader_dict):
     elif config.MODEL.NAME == 'RhythmFormer':
         model_trainer = trainer.RhythmFormerTrainer.RhythmFormerTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'OMNICAN':
-        model_trainer = trainer.OmnicanTrainer.OmniCanTrainer(config, data_loader_dict)
+        model_trainer = trainer.OmnicanTrainer.OmnicanTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'CVSM':
+        model_trainer = CVSMTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
     model_trainer.test(data_loader_dict)

@@ -58,6 +58,13 @@ class iPadDataLoader(BaseLoader):
         
         # sort the data_dirs_new by index
         data_dirs_new = sorted(data_dirs_new, key=lambda x: x['index'])  # sort by index
+        
+        
+        # print out all clip names
+        print("Data directories for split:")
+        for data_dir in data_dirs_new:
+            print(f"Index: {data_dir['index']}, Path: {data_dir['path']}")
+        
         return data_dirs_new
     
     def load_rgb_depth_pair(self, rgb_path, depth_path):

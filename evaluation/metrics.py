@@ -108,6 +108,8 @@ def calculate_metrics(predictions, labels, config):
     if config.INFERENCE.EVALUATION_METHOD == "FFT":
         gt_hr_fft_all = np.array(gt_hr_fft_all)
         predict_hr_fft_all = np.array(predict_hr_fft_all)
+        print(f'Predicted HR FFT: {predict_hr_fft_all}')
+        print(f'Ground    HR FFT: {gt_hr_fft_all}')
         SNR_all = np.array(SNR_all)
         MACC_all = np.array(MACC_all)
         num_test_samples = len(predict_hr_fft_all)
