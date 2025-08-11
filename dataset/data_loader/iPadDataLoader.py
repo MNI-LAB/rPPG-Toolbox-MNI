@@ -30,7 +30,7 @@ class iPadDataLoader(BaseLoader):
         dirs = list()
         for data_dir in data_dirs:
             subject_trail_val = os.path.split(data_dir)[-1].replace('_', '')
-            print(subject_trail_val)
+            # print(subject_trail_val)
             index = int(subject_trail_val)
             # subject = int(subject_trail_val[0:2])
             dirs.append({"index": index, "path": data_dir, "subject": 0}) # hard coded subject
@@ -61,9 +61,9 @@ class iPadDataLoader(BaseLoader):
         
         
         # print out all clip names
-        print("Data directories for split:")
-        for data_dir in data_dirs_new:
-            print(f"Index: {data_dir['index']}, Path: {data_dir['path']}")
+        # print("Data directories for split:")
+        # for data_dir in data_dirs_new:
+        #     print(f"Index: {data_dir['index']}, Path: {data_dir['path']}")
         
         return data_dirs_new
     

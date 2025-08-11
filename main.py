@@ -36,10 +36,70 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
+def custom_collate_fn(batch):
+    """
+    Custom collate function to handle variable-length sequences.
+    This function ensures all sequences are exactly 600 frames long.
+    Sequences longer than 600 are trimmed, shorter ones are padded.
+    """
+    # Separate data, labels, filenames, and chunk_ids
+    data_list = []
+    label_list = []
+    filename_list = []
+    chunk_id_list = []
+    
+    for data, label, filename, chunk_id in batch:
+        data_list.append(data)
+        label_list.append(label)
+        filename_list.append(filename)
+        chunk_id_list.append(chunk_id)
+    
+    # Set fixed length to 600
+    target_frames = 600
+    max_height = max(data.shape[2] for data in data_list)
+    max_width = max(data.shape[3] for data in data_list)
+    channels = data_list[0].shape[1]  # Should be the same for all
+    # print(f"target_frames: {target_frames}, max_height: {max_height}, max_width: {max_width}, channels: {channels}")
+    
+    # Process data tensors - trim or pad to exactly 600 frames
+    processed_data_list = []
+    for data in data_list:
+        # Convert numpy dtype to torch dtype
+        torch_dtype = torch.float32 if data.dtype == np.float32 else torch.float64
+        processed_data = torch.zeros(target_frames, channels, max_height, max_width, dtype=torch_dtype)
+        
+        # Trim or copy data based on length
+        actual_frames = min(data.shape[0], target_frames)
+        processed_data[:actual_frames, :, :data.shape[2], :data.shape[3]] = torch.from_numpy(data[:actual_frames])
+        processed_data_list.append(processed_data)
+    
+    # Stack the processed tensors
+    data_batch = torch.stack(processed_data_list, dim=0)
+    
+    # Process labels - trim or pad to exactly 600 length
+    processed_label_list = []
+    for label in label_list:
+        # Convert numpy dtype to torch dtype
+        torch_dtype = torch.float32 if label.dtype == np.float32 else torch.float64
+        processed_label = torch.zeros(target_frames, dtype=torch_dtype)
+        
+        # Trim or copy label data based on length
+        actual_length = min(label.shape[0], target_frames)
+        processed_label[:actual_length] = torch.from_numpy(label[:actual_length])
+        processed_label_list.append(processed_label)
+    
+    label_batch = torch.stack(processed_label_list, dim=0)
+    
+    return data_batch, label_batch, filename_list, chunk_id_list
+
+
 def add_args(parser):
     """Adds arguments for parser."""
+    # Hardcoded config file path - change this to switch between different configs
+    CONFIG_FILE = "configs/infer_configs/iPadData_OMNICAN_GD_GREATLAKES.yaml"
+    
     parser.add_argument('--config_file', required=False,
-                        default="configs/train_configs/PURE_PURE_UBFC-rPPG_TSCAN_BASIC.yaml", type=str, help="The name of the model.")
+                        default=CONFIG_FILE, type=str, help="The name of the model.")
     '''Neural Method Sample YAML LIST:
       SCAMPS_SCAMPS_UBFC-rPPG_TSCAN_BASIC.yaml
       SCAMPS_SCAMPS_UBFC-rPPG_DEEPPHYS_BASIC.yaml
@@ -155,8 +215,8 @@ if __name__ == "__main__":
 
     # configurations.
     config = get_config(args)
-    print('Configuration:')
-    print(config, end='\n\n')
+    # print('Configuration:')
+    # print(config, end='\n\n')
 
     data_loader_dict = dict() # dictionary of data loaders 
     if config.TOOLBOX_MODE == "train_and_test":
@@ -198,11 +258,12 @@ if __name__ == "__main__":
                 device=config.DEVICE)
             data_loader_dict['train'] = DataLoader(
                 dataset=train_data_loader,
-                num_workers=16,
+                num_workers=1,
                 batch_size=config.TRAIN.BATCH_SIZE,
                 shuffle=True,
                 worker_init_fn=seed_worker,
-                generator=train_generator
+                generator=train_generator,
+                collate_fn=custom_collate_fn
             )
         else:
             data_loader_dict['train'] = None
@@ -246,11 +307,12 @@ if __name__ == "__main__":
                 device=config.DEVICE)
             data_loader_dict["valid"] = DataLoader(
                 dataset=valid_data,
-                num_workers=16,
+                num_workers=1,
                 batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
                 shuffle=False,
                 worker_init_fn=seed_worker,
-                generator=general_generator
+                generator=general_generator,
+                collate_fn=custom_collate_fn
             )
         else:
             data_loader_dict['valid'] = None
@@ -296,11 +358,12 @@ if __name__ == "__main__":
                 device=config.DEVICE)
             data_loader_dict["test"] = DataLoader(
                 dataset=test_data,
-                num_workers=16,
+                num_workers=1,
                 batch_size=config.INFERENCE.BATCH_SIZE,
                 shuffle=False,
                 worker_init_fn=seed_worker,
-                generator=general_generator
+                generator=general_generator,
+                collate_fn=custom_collate_fn
             )
         else:
             data_loader_dict['test'] = None

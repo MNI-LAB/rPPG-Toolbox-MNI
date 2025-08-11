@@ -52,7 +52,7 @@ def _calculate_fft_hr_label(ppg_signal, fs=30, low_pass=0.6, high_pass=3.3):
     hr_mask = (freqs >= 50) & (freqs <= 150)
     if np.any(hr_mask):
         peak_hr = freqs[hr_mask][np.argmax(fft_mag[hr_mask])]
-        print(f"  Estimated HR: {peak_hr:.1f} BPM")    
+        # print(f"  Estimated HR: {peak_hr:.1f} BPM")    
     
     return peak_hr if np.any(hr_mask) else None
     

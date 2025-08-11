@@ -64,6 +64,8 @@ class OmnicanTrainer(BaseTrainer):
             self.model.train()
             # Model Training
             tbar = tqdm(data_loader["train"], ncols=80)
+            # print(f"data loader:{data_loader['train']}")
+            
             for idx, batch in enumerate(tbar):
                 tbar.set_description("Train epoch %s" % epoch)
                 data, labels = batch[0].to(
