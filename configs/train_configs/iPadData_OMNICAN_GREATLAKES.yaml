@@ -9,7 +9,7 @@ TRAIN:
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: False              # if first time, should be true
+    DO_PREPROCESS: True              # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/nfs/turbo/coe-mni/iPadData/training"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_preprocess"   # Processed dataset save path, need to be updated
@@ -19,8 +19,8 @@ TRAIN:
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized','Standardized']
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: Raw
-      DO_CHUNK: True
+      LABEL_TYPE: DiffNormalized
+      DO_CHUNK: False
       CHUNK_LENGTH: 180
       CROP_FACE:
         DO_CROP_FACE: True
@@ -38,7 +38,7 @@ VALID:
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: False                  # if first time, should be true
+    DO_PREPROCESS: True                  # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/nfs/turbo/coe-mni/iPadData/training"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_preprocess"    # Processed dataset save path, need to be updated
@@ -48,8 +48,8 @@ VALID:
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: Raw
-      DO_CHUNK: True
+      LABEL_TYPE: DiffNormalized
+      DO_CHUNK: False
       CHUNK_LENGTH: 180
       CROP_FACE:
         DO_CROP_FACE: True
@@ -69,7 +69,7 @@ TEST:
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: False                    # if first time, should be true
+    DO_PREPROCESS: True                    # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH:  "/nfs/turbo/coe-mni/iPadData/training"        # need to be updated
     CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_preprocess"    # Processed dataset save path, need to be updated
@@ -78,8 +78,8 @@ TEST:
     END: 1.0
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE: Raw
-      DO_CHUNK: True
+      LABEL_TYPE: DiffNormalized
+      DO_CHUNK: False
       CHUNK_LENGTH: 180
       CROP_FACE:
         DO_CROP_FACE: True
