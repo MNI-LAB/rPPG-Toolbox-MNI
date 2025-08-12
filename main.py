@@ -96,7 +96,7 @@ def custom_collate_fn(batch):
 def add_args(parser):
     """Adds arguments for parser."""
     # Hardcoded config file path - change this to switch between different configs
-    CONFIG_FILE = "configs/infer_configs/iPadData_OMNICAN_GD_GREATLAKES.yaml"
+    CONFIG_FILE = "configs/train_configs/iPadData_OMNICAN_GD_GREATLAKES.yaml"
     
     parser.add_argument('--config_file', required=False,
                         default=CONFIG_FILE, type=str, help="The name of the model.")

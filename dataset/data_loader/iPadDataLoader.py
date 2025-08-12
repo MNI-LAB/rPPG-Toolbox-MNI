@@ -33,7 +33,9 @@ class iPadDataLoader(BaseLoader):
             # print(subject_trail_val)
             index = int(subject_trail_val)
             # subject = int(subject_trail_val[0:2])
-            dirs.append({"index": index, "path": data_dir, "subject": 0}) # hard coded subject
+            subject_id = os.path.split(data_dir)[-1].split('_')[0]  # Extract "01", "02", etc.
+            # subject_name = self.get_subject_name(subject_id)
+            dirs.append({"index": index, "path": data_dir, "subject": subject_id})
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
