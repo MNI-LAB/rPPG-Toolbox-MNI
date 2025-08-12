@@ -11,7 +11,11 @@ import scipy.signal
 from tqdm import tqdm
 from PIL import Image, ImageDraw
 from typing import Tuple
+import random
 from evaluation.metrics import calculate_metrics # Import the metrics function
+from evaluation.post_process import calculate_metric_per_video, _detrend # Import standard toolbox functions
+from scipy.signal import butter
+from omnican_gt_hr_values import get_omnican_gt_hr_values # Import hardcoded GT values
 
 # Assume face_mesh_module.py is in the same directory or available in the Python path
 from classical_methods.face_mesh_module import FaceMeshDetector
@@ -27,8 +31,9 @@ def seed_worker(worker_id):
 
 def add_args(parser):
     """Adds arguments for parser."""
+    CONFIG_FILE = "configs/infer_configs/iPadData_CVSM_GREATLAKES.yaml"
     parser.add_argument('--config_file', required=False,
-                        default="configs/train_configs/PURE_PURE_UBFC-rPPG_TSCAN_BASIC.yaml", type=str, help="The name of the model.")
+                        default=CONFIG_FILE, type=str, help="The name of the model.")
     '''Neural Method Sample YAML LIST:
       SCAMPS_SCAMPS_UBFC-rPPG_TSCAN_BASIC.yaml
       SCAMPS_SCAMPS_UBFC-rPPG_DEEPPHYS_BASIC.yaml
@@ -76,66 +81,9 @@ def get_bounding_box(roi_name: str, landmarks_pixels: np.ndarray) -> np.ndarray:
     bounding_box_pixels = landmarks_pixels[landmark_indices]
     return bounding_box_pixels
 
-def phase3(intensity: np.ndarray, fps: int, order: int = 2, i_window_size: int = 10) -> Tuple[float, float]:
-    def find_HR(intensity: np.ndarray) -> Tuple[float, np.ndarray, np.ndarray, float]:
-        if len(intensity) == 0:
-            return 0.0, np.array([]), np.array([]), 0.0
+# Removed phase3 function - will use standard toolbox HR calculation methods instead
 
-        Intensity_freq = np.fft.rfft(intensity)
-        X_final = np.abs(Intensity_freq)
-        freq = np.fft.rfftfreq(len(intensity), 1.0 / fps) * 60.0
-        
-        mask = (freq >= 50) & (freq <= 150)
-        freq_filtered = freq[mask]
-        hr_arr = X_final[mask]
-
-        if hr_arr.size == 0:
-            return 0.0, np.array([]), np.array([]), 0.0
-
-        HR = freq_filtered[np.argmax(hr_arr)]
-        
-        if np.sum(hr_arr) == 0:
-            confidence = 0.0
-        else:
-            hr_intensity = hr_arr[np.argmax(hr_arr)]
-            confidence = hr_intensity / np.mean(hr_arr)
-        return HR, freq_filtered, hr_arr, confidence
-
-    if len(intensity) >= i_window_size and i_window_size % 2 == 1:
-        intensity = scipy.signal.savgol_filter(intensity, i_window_size, order, mode='nearest')
-    
-    HR_raw, _, _, confidence = find_HR(intensity)
-    return HR_raw, confidence
-
-def interval_process(intensity: np.ndarray, fps: int, interval_size: int = 5, overlap: float = 2.5) -> Tuple[list, list]:
-    hrs = []
-    confs = []
-    
-    step = int((interval_size - overlap) * fps)
-    if step <= 0:
-        step = 1
-
-    interval_frames = interval_size * fps
-    
-    for i in range(0, len(intensity) - interval_frames + 1, step):
-        interval_intensity = intensity[i : i + interval_frames]
-        HR_raw, confidence = phase3(interval_intensity, fps)
-        hrs.append(HR_raw)
-        confs.append(confidence)
-    
-    original_length = len(confs)
-    if original_length > 0:
-        mean_conf = np.mean(confs)
-        std_conf = np.std(confs)
-        filtered = [(hr, confs[i]) for i, hr in enumerate(hrs) if abs(confs[i] - mean_conf) <= 1 * std_conf]
-        if filtered:
-            hrs, confs = zip(*filtered)
-            hrs = list(hrs)
-            confs = list(confs)
-        else:
-            hrs, confs = [], []
-
-    return hrs, confs
+# Removed interval_process function - will use standard toolbox evaluation windowing instead
 
 # --- Data Loading Functions ---
 
@@ -177,40 +125,154 @@ def read_wave(bvp_file: str) -> np.ndarray:
         waves = [label["waveform"] for label in labels]
     return np.asarray(waves)
 
-def chunk_signals(signal: np.ndarray, chunk_len: int, device: str = 'cpu') -> dict:
+def chunk_signals_for_standard_evaluation(pred_signal: np.ndarray, gt_signal: np.ndarray, config) -> Tuple[dict, dict]:
     """
-    Chunks a full-length signal into a dictionary of tensors,
-    compatible with rPPG-Toolbox's metric calculation.
+    Prepare signals for standard toolbox evaluation by creating single-chunk dictionaries.
+    The standard toolbox evaluation will handle windowing internally.
     """
-    chunked_signals = {}
-    total_len = len(signal)
+    # Create single chunk containing the entire signal for each subject
+    # The standard evaluation function will apply windowing based on config.INFERENCE.EVALUATION_WINDOW
+    pred_dict = {0: torch.tensor(pred_signal, dtype=torch.float32, device=config.DEVICE).view(-1, 1)}
+    gt_dict = {0: torch.tensor(gt_signal, dtype=torch.float32, device=config.DEVICE).view(-1, 1)}
     
-    # Discard the last incomplete chunk to match framework's behavior
-    num_chunks = total_len // chunk_len
+    return pred_dict, gt_dict
+
+def calculate_metrics_with_hardcoded_gt(predictions, labels, config):
+    """Calculate metrics using hardcoded GT HR values from OMNICAN for consistency"""
+    from evaluation.metrics import _reform_data_from_dict
+    from evaluation.post_process import calculate_metric_per_video
+    import numpy as np
+    from datetime import datetime
+    import os
+    import sys
     
-    for i in range(num_chunks):
-        start = i * chunk_len
-        end = start + chunk_len
-        chunk = signal[start:end]
-        
-        # Reshape to (chunk_len, 1) and convert to a PyTorch tensor
-        chunk_tensor = torch.tensor(chunk, dtype=torch.float32, device=device).view(-1, 1)
-        chunked_signals[i] = chunk_tensor
+    # Get the hardcoded GT values
+    hardcoded_gt_hrs = get_omnican_gt_hr_values()
+    print(f"Using {len(hardcoded_gt_hrs)} hardcoded GT HR values from OMNICAN")
     
-    # graph signal using plt
-    plt.figure(figsize=(10, 4))
-    plt.plot(signal, label='Original Signal', color='blue')
-    for i, chunk in chunked_signals.items():
-        plt.plot(range(i * chunk_len, (i + 1) * chunk_len), chunk.cpu().numpy(), label=f'Chunk {i}', linestyle='--')
-    plt.title('Signal Chunking Visualization')
-    plt.xlabel('Sample Index')
-    plt.ylabel('Signal Value')
-    plt.legend()
-    plt.grid()
-    plt.savefig('signal_chunking_visualization.png', dpi=300)
-    plt.close()
+    predict_hr_fft_all = []
+    gt_hr_fft_all = []
+    SNR_all = []
+    MACC_all = []
     
-    return chunked_signals
+    print("Calculating metrics with hardcoded GT values...")
+    
+    gt_index = 0  # Index for hardcoded GT values
+    
+    for index in sorted(predictions.keys()):
+        try:
+            prediction = _reform_data_from_dict(predictions[index])
+            label = _reform_data_from_dict(labels[index])  # We still need this for SNR calculation
+            
+            video_frame_size = prediction.shape[0]
+            if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
+                window_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE * config.TEST.DATA.FS
+                if window_frame_size > video_frame_size:
+                    window_frame_size = video_frame_size
+            else:
+                window_frame_size = video_frame_size
+
+            for i in range(0, len(prediction), window_frame_size):
+                pred_window = prediction[i:i+window_frame_size]
+                label_window = label[i:i+window_frame_size]
+
+                if len(pred_window) < 9:
+                    print(f"Window frame size of {len(pred_window)} is smaller than minimum pad length of 9. Window ignored!")
+                    continue
+
+                if config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Standardized" or \
+                        config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Raw":
+                    diff_flag_test = False
+                elif config.TEST.DATA.PREPROCESS.LABEL_TYPE == "DiffNormalized":
+                    diff_flag_test = True
+                else:
+                    raise ValueError("Unsupported label type in testing!")
+                
+                if config.INFERENCE.EVALUATION_METHOD == "FFT":
+                    # Calculate predicted HR using standard method
+                    _, pred_hr_fft, SNR, macc = calculate_metric_per_video(
+                        pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
+                    
+                    # Use hardcoded GT HR instead of calculated one
+                    if gt_index < len(hardcoded_gt_hrs):
+                        gt_hr_fft = hardcoded_gt_hrs[gt_index]
+                        gt_index += 1
+                    else:
+                        print(f"Warning: Not enough hardcoded GT values. Using calculated value.")
+                        gt_hr_fft, _, _, _ = calculate_metric_per_video(
+                            pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
+                    
+                    gt_hr_fft_all.append(gt_hr_fft)
+                    predict_hr_fft_all.append(pred_hr_fft)
+                    SNR_all.append(SNR)
+                    MACC_all.append(macc)
+                else:
+                    raise ValueError("Only FFT evaluation method is supported in this version!")
+                    
+        except Exception as e:
+            print(f"Error processing index {index}: {e}")
+            continue
+    
+    # Convert to numpy arrays
+    gt_hr_fft_all = np.array(gt_hr_fft_all)
+    predict_hr_fft_all = np.array(predict_hr_fft_all)
+    SNR_all = np.array(SNR_all)
+    MACC_all = np.array(MACC_all)
+    
+    print(f'Predicted HR FFT: {predict_hr_fft_all}')
+    print(f'Ground    HR FFT: {gt_hr_fft_all}')
+    
+    num_test_samples = len(predict_hr_fft_all)
+    
+    # Calculate all the metrics
+    for metric in config.TEST.METRICS:
+        if metric == "MAE":
+            MAE_FFT = np.mean(np.abs(predict_hr_fft_all - gt_hr_fft_all))
+            standard_error = np.std(np.abs(predict_hr_fft_all - gt_hr_fft_all)) / np.sqrt(num_test_samples)
+            print("FFT MAE (FFT Label): {0} +/- {1}".format(MAE_FFT, standard_error))
+        elif metric == "RMSE":
+            squared_errors = np.square(predict_hr_fft_all - gt_hr_fft_all)
+            RMSE_FFT = np.sqrt(np.mean(squared_errors))
+            standard_error = np.sqrt(np.std(squared_errors) / np.sqrt(num_test_samples))
+            print("FFT RMSE (FFT Label): {0} +/- {1}".format(RMSE_FFT, standard_error))
+        elif metric == "MAPE":
+            MAPE_FFT = np.mean(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) * 100
+            standard_error = np.std(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) / np.sqrt(num_test_samples) * 100
+            print("FFT MAPE (FFT Label): {0} +/- {1}".format(MAPE_FFT, standard_error))
+        elif metric == "Pearson":
+            Pearson_FFT = np.corrcoef(predict_hr_fft_all, gt_hr_fft_all)
+            correlation_coefficient = Pearson_FFT[0][1]
+            standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
+            print("FFT Pearson (FFT Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
+        elif metric == "SNR":
+            SNR_FFT = np.mean(SNR_all)
+            standard_error = np.std(SNR_all) / np.sqrt(num_test_samples)
+            print("FFT SNR (FFT Label): {0} +/- {1} (dB)".format(SNR_FFT, standard_error))
+        elif metric == "MACC":
+            MACC_avg = np.mean(MACC_all)
+            standard_error = np.std(MACC_all) / np.sqrt(num_test_samples)
+            print("FFT MACC (FFT Label): {0} +/- {1}".format(MACC_avg, standard_error))
+        elif "BA" in metric:
+            from evaluation.BlandAltmanPy import BlandAltman
+            compare = BlandAltman(gt_hr_fft_all, predict_hr_fft_all, config, averaged=True)
+            # Generate file name
+            filename_id = f"CVSM_vs_OMNICAN_GT"
+            compare.scatter_plot(
+                x_label='GT PPG HR [bpm]',
+                y_label='rPPG HR [bpm]',
+                show_legend=True, figure_size=(5, 5),
+                the_title=f'{filename_id}_FFT_BlandAltman_ScatterPlot',
+                file_name=f'{filename_id}_FFT_BlandAltman_ScatterPlot.pdf')
+            compare.difference_plot(
+                x_label='Difference between rPPG HR and GT PPG HR [bpm]',
+                y_label='Average of rPPG HR and GT PPG HR [bpm]',
+                show_legend=True, figure_size=(5, 5),
+                the_title=f'{filename_id}_FFT_BlandAltman_DifferencePlot',
+                file_name=f'{filename_id}_FFT_BlandAltman_DifferencePlot.pdf')
+        else:
+            pass  # Skip unknown metrics
+    
+    print(f"\\nUsed {gt_index} out of {len(hardcoded_gt_hrs)} hardcoded GT values")
 
 # --- FaceProcessing Class (Adapted for this script) ---
 
@@ -331,9 +393,10 @@ class FaceProcessing:
             print(f"Warning: No video or depth frames found in {video_path}")
             return np.array([])
         
-        print(f"Processing {num_frames} frames from {os.path.basename(video_path)}...")
+        # print(f"Processing {num_frames} frames from {os.path.basename(video_path)}...")
 
-        for i in tqdm(range(num_frames), desc="Processing frames"):
+        # for i in tqdm(range(num_frames), desc="Processing frames"):
+        for i in range(num_frames):
             # Load images directly from disk
             img = cv2.imread(all_png[i])
             depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
@@ -379,27 +442,7 @@ class FaceProcessing:
         return compensated_ppg_signal
     
     
-def debug_chunks(signal, chunk_len):
-    num_chunks = len(signal) // chunk_len
-    for i in range(num_chunks):
-        start = i * chunk_len
-        end = start + chunk_len
-        chunk = signal[start:end]
-        
-        print(f"Chunk {i}:")
-        print(f"  Mean: {np.mean(chunk):.2f}")
-        print(f"  Std: {np.std(chunk):.2f}")
-        print(f"  Min/Max: {np.min(chunk):.2f}/{np.max(chunk):.2f}")
-        print(f"  Non-zero values: {np.count_nonzero(chunk)}/{len(chunk)}")
-        
-        # Quick HR estimate
-        freqs = np.fft.rfftfreq(len(chunk), 1.0/fps) * 60
-        fft_mag = np.abs(np.fft.rfft(chunk))
-        hr_mask = (freqs >= 50) & (freqs <= 150)
-        if np.any(hr_mask):
-            peak_hr = freqs[hr_mask][np.argmax(fft_mag[hr_mask])]
-            print(f"  Estimated HR: {peak_hr:.1f} BPM")
-        print()
+# Removed debug_chunks function - no longer needed with standard evaluation
 
 # --- Main Script Execution ---
 
@@ -473,7 +516,11 @@ if __name__ == "__main__":
     print('Configuration:')
     print(config, end='\n\n')
     fps = config.TEST.DATA.FS
-    chunk_len = config.TEST.DATA.PREPROCESS.CHUNK_LENGTH
+    
+    # Ensure we're using evaluation windows like the standard toolbox
+    print(f"Using evaluation window size: {config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE} seconds")
+    print(f"Evaluation method: {config.INFERENCE.EVALUATION_METHOD}")
+    print(f"Label type: {config.TEST.DATA.PREPROCESS.LABEL_TYPE}")
 
     # Get the full list of data directories
     # ipadDataLoader = iPadDataLoader(name="test", data_path=config.TEST.DATA.DATA_PATH, config_data=config.TEST.DATA, device=config.DEVICE)
@@ -508,37 +555,36 @@ if __name__ == "__main__":
         
         # Process video and extract PPG signal in single loop
         compensated_ppg_signal = face_processor.predict(clip_path)
-        chunk_len = len(compensated_ppg_signal) if compensated_ppg_signal.size > 0 else 0
+        
         if compensated_ppg_signal.size > 0:
             # Ensure both signals have the same length
             min_length = min(len(compensated_ppg_signal), len(gt_bvp_wave))
             compensated_ppg_signal = compensated_ppg_signal[:min_length]
             gt_bvp_wave = gt_bvp_wave[:min_length]
             
-            # Convert to chunked format for metrics calculation
-            predictions_chunks = chunk_signals(compensated_ppg_signal, chunk_len, config.DEVICE)
-            labels_chunks = chunk_signals(gt_bvp_wave, chunk_len, config.DEVICE)
+            # Check minimum signal length for evaluation
+            if min_length < 9:  # Same minimum as standard toolbox
+                print(f"Warning: Signal for {clip_name} too short ({min_length} frames). Skipping...")
+                continue
             
-            # debug label chunks
-            # debug_chunks(gt_bvp_wave, chunk_len)
+            # Prepare signals for standard evaluation (single chunk per subject)
+            pred_chunks, gt_chunks = chunk_signals_for_standard_evaluation(
+                compensated_ppg_signal, gt_bvp_wave, config)
             
-            # Only add if chunks were created (signal was long enough)
-            if predictions_chunks:
-                all_predictions[subject_id] = predictions_chunks
-                all_labels[subject_id] = labels_chunks
-            else:
-                print(f"Warning: Signal for {clip_name} too short for chunking. Skipping...")
+            all_predictions[subject_id] = pred_chunks
+            all_labels[subject_id] = gt_chunks
         else:
             print(f"Warning: No valid signal detected for {clip_name}. Skipping...")
 
     print("\nProcessing complete. All predictions and labels have been collected.")
 
     # Filter out subjects with no valid predictions before calculating metrics
-    all_predictions_filtered = {k: v for k, v in all_predictions.items() if v}  # v is now a dict, so this works
+    all_predictions_filtered = {k: v for k, v in all_predictions.items() if v}
     all_labels_filtered = {k: v for k, v in all_labels.items() if k in all_predictions_filtered}
 
     if not all_predictions_filtered:
         print("No valid predictions were generated. Cannot calculate metrics.")
     else:
-        print(f"\nCalculating metrics for all {len(all_predictions_filtered)} clips...")
-        calculate_metrics(all_predictions_filtered, all_labels_filtered, config)
+        print(f"\nCalculating metrics for all {len(all_predictions_filtered)} clips using hardcoded OMNICAN GT values...")
+        # Use the custom metrics calculation with hardcoded GT values
+        calculate_metrics_with_hardcoded_gt(all_predictions_filtered, all_labels_filtered, config)

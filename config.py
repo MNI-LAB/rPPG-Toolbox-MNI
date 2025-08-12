@@ -331,6 +331,14 @@ _C.MODEL.OMNICAN = CN()
 _C.MODEL.OMNICAN.FRAME_DEPTH = 10
 
 # -----------------------------------------------------------------------------
+# Model Settings for RCNNiBVP
+# -----------------------------------------------------------------------------
+_C.MODEL.RCNNiBVP = CN()
+_C.MODEL.RCNNiBVP.FRAME_NUM = 128
+_C.MODEL.RCNNiBVP.CHANNELS = 1          # green/NIR channel count
+_C.MODEL.RCNNiBVP.DEPTH_CHANNELS = 1    # depth channel count
+
+# -----------------------------------------------------------------------------
 # Model Settings for CVSM
 # -----------------------------------------------------------------------------
 # _C.MODEL.CVSM = CN()

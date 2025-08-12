@@ -146,6 +146,8 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.RhythmFormerTrainer.RhythmFormerTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'OMNICAN':
         model_trainer = trainer.OmnicanTrainer.OmnicanTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'RCNNiBVP':
+        model_trainer = trainer.RCNNiBVPTrainer.RCNNiBVPTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
     model_trainer.train(data_loader_dict)
@@ -176,6 +178,8 @@ def test(config, data_loader_dict):
         model_trainer = trainer.RhythmFormerTrainer.RhythmFormerTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'OMNICAN':
         model_trainer = trainer.OmnicanTrainer.OmnicanTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'RCNNiBVP':
+        model_trainer = trainer.RCNNiBVPTrainer.RCNNiBVPTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'CVSM':
         model_trainer = CVSMTrainer(config, data_loader_dict)
     else:
