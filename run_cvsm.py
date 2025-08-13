@@ -1,3 +1,27 @@
+"""
+DEPRECATED: This file is kept for reference only.
+
+CVSM has been integrated into the standard rPPG-Toolbox pipeline as an unsupervised method.
+
+To use CVSM with the standard pipeline, run:
+    python main.py --config_file configs/infer_configs/iPadData_CVSM_UNSUPERVISED.yaml
+
+Benefits of using the standard pipeline:
+- Automatic evaluation with all standard metrics including PERCENT_ACCURACY
+- Standardized data loading and preprocessing
+- Consistent evaluation windows and methodology
+- Bland-Altman plot generation
+- Integration with existing toolbox features
+
+The CVSM method is now located at:
+- unsupervised_methods/methods/CVSM.py
+- Added to unsupervised_methods/unsupervised_predictor.py
+- Config: configs/infer_configs/iPadData_CVSM_UNSUPERVISED.yaml
+
+Original standalone implementation preserved below for reference:
+===============================================================================
+"""
+
 import os
 import argparse
 from config import get_config

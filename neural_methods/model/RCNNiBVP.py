@@ -160,8 +160,10 @@ class RCNNiBVP(nn.Module):
         # Apply ResidualCNN to depth
         residual_depth = self.RCNN(depth_reshaped)
         
-        # Subtract residual depth from green/NIR
-        compensated_green_nir = green_nir_reshaped - residual_depth
+        # Apply more gentle residual connection with learned weighting
+        # Instead of direct subtraction, use weighted combination
+        alpha = 0.1  # Weighting factor for residual connection
+        compensated_green_nir = green_nir_reshaped - alpha * residual_depth
         
         # Reshape back to 3D: [batch, channels, frames, height, width]
         compensated_green_nir = compensated_green_nir.view(batch, length, self.in_channels, height, width).permute(0, 2, 1, 3, 4)

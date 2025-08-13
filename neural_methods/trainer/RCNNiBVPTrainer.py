@@ -37,7 +37,9 @@ class RCNNiBVPTrainer(BaseTrainer):
 
         if config.TOOLBOX_MODE == "train_and_test":
             self.num_train_batches = len(data_loader["train"])
-            self.loss_model = Neg_Pearson()
+            # Try MSE loss first for more stable training, can switch back to Pearson later
+            self.loss_model = torch.nn.MSELoss()
+            # self.loss_model = Neg_Pearson()  # Uncomment this and comment MSE to use Pearson loss
             self.optimizer = optim.Adam(
                 self.model.parameters(), lr=config.TRAIN.LR)
             # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
@@ -75,15 +77,21 @@ class RCNNiBVPTrainer(BaseTrainer):
                 # where channels = [RGB channels, depth channel] (e.g., [R, G, B, D] or [G, D])
                 N, D, C, H, W = data.shape
                 
-                # Extract green channel (assuming it's channel 1 for RGB or channel 0 for green-only)
-                if C >= 4:  # RGBD format
+                print(f"DEBUG: Training batch shape: {data.shape}, C={C}")  # Debug info
+                
+                # For iPadData with 8 channels: [R, G, B, D, R_diff_norm, G_diff_norm, B_diff_norm, D_diff_norm]
+                if C == 8:  # iPadData with DiffNormalized + Standardized preprocessing
+                    # Use processed green channel (channel 5) and processed depth channel (channel 7)
+                    green_nir = data[:, :, 5:6, :, :]  # Processed Green channel (G_diff_norm)
+                    depth = data[:, :, 7:8, :, :]      # Processed Depth channel (D_diff_norm)
+                elif C == 4:  # Basic RGBD format
                     green_nir = data[:, :, 1:2, :, :]  # Green channel
                     depth = data[:, :, 3:4, :, :]      # Depth channel
                 elif C == 2:  # Green + Depth format
                     green_nir = data[:, :, 0:1, :, :]  # Green/NIR channel
                     depth = data[:, :, 1:2, :, :]      # Depth channel
                 else:
-                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth) or 4+ (RGBD)")
+                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth), 4 (RGBD), or 8 (preprocessed iPadData). Got shape: {data.shape}")
                 
                 # Reshape from [N, D, 1, H, W] to [N, 1, D, H, W] for model input
                 green_nir = green_nir.permute(0, 2, 1, 3, 4)
@@ -92,15 +100,21 @@ class RCNNiBVPTrainer(BaseTrainer):
                 self.optimizer.zero_grad()
                 pred_ppg = self.model(green_nir, depth)  # Shape: [batch, frames-1]
                 
+                print(f"DEBUG: pred_ppg shape: {pred_ppg.shape}, labels shape: {labels.shape}")  # Debug info
+                
                 # Labels should match the prediction shape
                 # pred_ppg is [batch, model_frames-1], labels is [batch, data_frames]
                 # We need to match the prediction length to the label length
                 pred_frames = pred_ppg.shape[1]
                 labels_matched = labels[:, :pred_frames].contiguous()  # Take first pred_frames from labels
                 
+                # Normalize both prediction and labels before loss computation
+                pred_ppg_norm = (pred_ppg - torch.mean(pred_ppg, dim=1, keepdim=True)) / (torch.std(pred_ppg, dim=1, keepdim=True) + 1e-8)
+                labels_norm = (labels_matched - torch.mean(labels_matched, dim=1, keepdim=True)) / (torch.std(labels_matched, dim=1, keepdim=True) + 1e-8)
+                
                 # Flatten both to match loss function expectations
-                pred_ppg_flat = pred_ppg.view(-1, 1)
-                labels_flat = labels_matched.view(-1, 1)
+                pred_ppg_flat = pred_ppg_norm.view(-1, 1)
+                labels_flat = labels_norm.view(-1, 1)
                 
                 loss = self.loss_model(pred_ppg_flat, labels_flat)
                 loss.backward()
@@ -159,14 +173,19 @@ class RCNNiBVPTrainer(BaseTrainer):
                 # Extract green/NIR and depth channels
                 N, D, C, H, W = data_valid.shape
                 
-                if C >= 4:  # RGBD format
+                # For iPadData with 8 channels: [R, G, B, D, R_diff_norm, G_diff_norm, B_diff_norm, D_diff_norm]
+                if C == 8:  # iPadData with DiffNormalized + Standardized preprocessing
+                    # Use processed green channel (channel 5) and processed depth channel (channel 7)
+                    green_nir = data_valid[:, :, 5:6, :, :]  # Processed Green channel (G_diff_norm)
+                    depth = data_valid[:, :, 7:8, :, :]      # Processed Depth channel (D_diff_norm)
+                elif C == 4:  # Basic RGBD format
                     green_nir = data_valid[:, :, 1:2, :, :]  # Green channel
                     depth = data_valid[:, :, 3:4, :, :]      # Depth channel
                 elif C == 2:  # Green + Depth format
                     green_nir = data_valid[:, :, 0:1, :, :]  # Green/NIR channel
                     depth = data_valid[:, :, 1:2, :, :]      # Depth channel
                 else:
-                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth) or 4+ (RGBD)")
+                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth), 4 (RGBD), or 8 (preprocessed iPadData). Got shape: {data_valid.shape}")
                 
                 # Reshape from [N, D, 1, H, W] to [N, 1, D, H, W] for model input
                 green_nir = green_nir.permute(0, 2, 1, 3, 4)
@@ -178,9 +197,13 @@ class RCNNiBVPTrainer(BaseTrainer):
                 pred_frames = pred_ppg_valid.shape[1] 
                 labels_matched = labels_valid[:, :pred_frames].contiguous()  # Take first pred_frames from labels
                 
+                # Normalize both prediction and labels before loss computation (same as training)
+                pred_ppg_norm = (pred_ppg_valid - torch.mean(pred_ppg_valid, dim=1, keepdim=True)) / (torch.std(pred_ppg_valid, dim=1, keepdim=True) + 1e-8)
+                labels_norm = (labels_matched - torch.mean(labels_matched, dim=1, keepdim=True)) / (torch.std(labels_matched, dim=1, keepdim=True) + 1e-8)
+                
                 # Flatten both to match loss function expectations
-                pred_ppg_flat = pred_ppg_valid.view(-1, 1)
-                labels_flat = labels_matched.view(-1, 1)
+                pred_ppg_flat = pred_ppg_norm.view(-1, 1)
+                labels_flat = labels_norm.view(-1, 1)
                 
                 loss = self.loss_model(pred_ppg_flat, labels_flat)
                 valid_loss.append(loss.item())
@@ -230,14 +253,19 @@ class RCNNiBVPTrainer(BaseTrainer):
                 # Extract green/NIR and depth channels
                 N, D, C, H, W = data_test.shape
                 
-                if C >= 4:  # RGBD format
+                # For iPadData with 8 channels: [R, G, B, D, R_diff_norm, G_diff_norm, B_diff_norm, D_diff_norm]
+                if C == 8:  # iPadData with DiffNormalized + Standardized preprocessing
+                    # Use processed green channel (channel 5) and processed depth channel (channel 7)
+                    green_nir = data_test[:, :, 5:6, :, :]  # Processed Green channel (G_diff_norm)
+                    depth = data_test[:, :, 7:8, :, :]      # Processed Depth channel (D_diff_norm)
+                elif C == 4:  # Basic RGBD format
                     green_nir = data_test[:, :, 1:2, :, :]  # Green channel
                     depth = data_test[:, :, 3:4, :, :]      # Depth channel
                 elif C == 2:  # Green + Depth format
                     green_nir = data_test[:, :, 0:1, :, :]  # Green/NIR channel
                     depth = data_test[:, :, 1:2, :, :]      # Depth channel
                 else:
-                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth) or 4+ (RGBD)")
+                    raise ValueError(f"Unsupported channel format: {C} channels. Expected 2 (Green+Depth), 4 (RGBD), or 8 (preprocessed iPadData). Got shape: {data_test.shape}")
                 
                 # Reshape from [N, D, 1, H, W] to [N, 1, D, H, W] for model input
                 green_nir = green_nir.permute(0, 2, 1, 3, 4)

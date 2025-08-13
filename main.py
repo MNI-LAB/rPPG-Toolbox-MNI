@@ -205,6 +205,8 @@ def unsupervised_method_inference(config, data_loader):
             unsupervised_predict(config, data_loader, "PBV")
         elif unsupervised_method == "OMIT":
             unsupervised_predict(config, data_loader, "OMIT")
+        elif unsupervised_method == "CVSM":
+            unsupervised_predict(config, data_loader, "CVSM")
         else:
             raise ValueError("Not supported unsupervised method!")
 
@@ -388,9 +390,11 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.UBFCPHYSLoader.UBFCPHYSLoader
         elif config.UNSUPERVISED.DATA.DATASET == "iBVP":
             unsupervised_loader = data_loader.iBVPLoader.iBVPLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "iPadData":
+            unsupervised_loader = data_loader.iPadDataLoader.iPadDataLoader
         else:
-            raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
-                             SCAMPS, BP4D+, UBFC-PHYS and iBVP.")
+            raise ValueError("Unsupervised dataset not supported! Currently supporting UBFC-rPPG, PURE, MMPD, \
+                             SCAMPS, BP4D+, UBFC-PHYS, iBVP, and iPadData.")
         
         unsupervised_data = unsupervised_loader(
             name="unsupervised",

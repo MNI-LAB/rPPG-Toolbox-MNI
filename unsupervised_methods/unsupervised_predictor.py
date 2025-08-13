@@ -8,6 +8,7 @@ from unsupervised_methods.methods.LGI import *
 from unsupervised_methods.methods.PBV import *
 from unsupervised_methods.methods.POS_WANG import *
 from unsupervised_methods.methods.OMIT import *
+from unsupervised_methods.methods.CVSM import *
 from tqdm import tqdm
 from evaluation.BlandAltmanPy import BlandAltman
 
@@ -42,6 +43,8 @@ def unsupervised_predict(config, data_loader, method_name):
                 BVP = PBV(data_input)
             elif method_name == "OMIT":
                 BVP = OMIT(data_input)
+            elif method_name == "CVSM":
+                BVP = CVSM(data_input, config.UNSUPERVISED.DATA.FS)
             else:
                 raise ValueError("unsupervised method name wrong!")
 
@@ -121,6 +124,19 @@ def unsupervised_predict(config, data_loader, method_name):
                 MACC_avg = np.mean(MACC_all)
                 standard_error = np.std(MACC_all) / np.sqrt(num_test_samples)
                 print("MACC (avg): {0} +/- {1}".format(MACC_avg, standard_error))
+            elif metric == "PERCENT_ACCURACY":
+                # Calculate percentage of predictions within 10% of ground truth (following paper methodology)
+                percent_errors = np.abs((predict_hr_peak_all - gt_hr_peak_all) / gt_hr_peak_all) * 100
+                within_10_percent = np.sum(percent_errors <= 10.0)
+                total_measurements = len(percent_errors)
+                percent_accuracy = (within_10_percent / total_measurements) * 100
+                # Calculate confidence interval for proportion using Wilson score interval
+                z = 1.96  # 95% confidence
+                p = within_10_percent / total_measurements
+                n = total_measurements
+                ci_half_width = z * np.sqrt((p * (1 - p) + z**2 / (4 * n)) / n) / (1 + z**2 / n)
+                print("PEAK Percentage Accuracy (within 10%): {0:.1f}% ({1}/{2} measurements) +/- {3:.1f}%".format(
+                    percent_accuracy, within_10_percent, total_measurements, ci_half_width * 100))
             elif "BA" in metric:
                 compare = BlandAltman(gt_hr_peak_all, predict_hr_peak_all, config, averaged=True)
                 compare.scatter_plot(
@@ -173,6 +189,19 @@ def unsupervised_predict(config, data_loader, method_name):
                 MACC_avg = np.mean(MACC_all)
                 standard_error = np.std(MACC_all) / np.sqrt(num_test_samples)
                 print("MACC (avg): {0} +/- {1}".format(MACC_avg, standard_error))
+            elif metric == "PERCENT_ACCURACY":
+                # Calculate percentage of predictions within 10% of ground truth (following paper methodology)
+                percent_errors = np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all) * 100
+                within_10_percent = np.sum(percent_errors <= 10.0)
+                total_measurements = len(percent_errors)
+                percent_accuracy = (within_10_percent / total_measurements) * 100
+                # Calculate confidence interval for proportion using Wilson score interval
+                z = 1.96  # 95% confidence
+                p = within_10_percent / total_measurements
+                n = total_measurements
+                ci_half_width = z * np.sqrt((p * (1 - p) + z**2 / (4 * n)) / n) / (1 + z**2 / n)
+                print("FFT Percentage Accuracy (within 10%): {0:.1f}% ({1}/{2} measurements) +/- {3:.1f}%".format(
+                    percent_accuracy, within_10_percent, total_measurements, ci_half_width * 100))
             elif "BA" in metric:
                 compare = BlandAltman(gt_hr_fft_all, predict_hr_fft_all, config, averaged=True)
                 compare.scatter_plot(

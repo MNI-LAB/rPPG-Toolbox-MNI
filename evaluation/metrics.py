@@ -212,6 +212,19 @@ def calculate_metrics(predictions, labels, config):
                     MACC_avg = np.mean(MACC_all)
                     standard_error = np.std(MACC_all) / np.sqrt(num_test_samples)
                     print("FFT MACC (FFT Label): {0} +/- {1}".format(MACC_avg, standard_error))
+                elif metric == "PERCENT_ACCURACY":
+                    # Calculate percentage of predictions within 10% of ground truth (following paper methodology)
+                    percent_errors = np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all) * 100
+                    within_10_percent = np.sum(percent_errors <= 10.0)
+                    total_measurements = len(percent_errors)
+                    percent_accuracy = (within_10_percent / total_measurements) * 100
+                    # Calculate confidence interval for proportion using Wilson score interval
+                    z = 1.96  # 95% confidence
+                    p = within_10_percent / total_measurements
+                    n = total_measurements
+                    ci_half_width = z * np.sqrt((p * (1 - p) + z**2 / (4 * n)) / n) / (1 + z**2 / n)
+                    print("FFT Percentage Accuracy (within 10%): {0:.1f}% ({1}/{2} measurements) +/- {3:.1f}%".format(
+                        percent_accuracy, within_10_percent, total_measurements, ci_half_width * 100))
                 elif "AU" in metric:
                     pass
                 elif "BA" in metric:  
@@ -266,6 +279,19 @@ def calculate_metrics(predictions, labels, config):
                     MACC_avg = np.mean(MACC_all)
                     standard_error = np.std(MACC_all) / np.sqrt(num_test_samples)
                     print("PEAK MACC (PEAK Label): {0} +/- {1}".format(MACC_avg, standard_error))
+                elif metric == "PERCENT_ACCURACY":
+                    # Calculate percentage of predictions within 10% of ground truth (following paper methodology)
+                    percent_errors = np.abs((predict_hr_peak_all - gt_hr_peak_all) / gt_hr_peak_all) * 100
+                    within_10_percent = np.sum(percent_errors <= 10.0)
+                    total_measurements = len(percent_errors)
+                    percent_accuracy = (within_10_percent / total_measurements) * 100
+                    # Calculate confidence interval for proportion using Wilson score interval
+                    z = 1.96  # 95% confidence
+                    p = within_10_percent / total_measurements
+                    n = total_measurements
+                    ci_half_width = z * np.sqrt((p * (1 - p) + z**2 / (4 * n)) / n) / (1 + z**2 / n)
+                    print("PEAK Percentage Accuracy (within 10%): {0:.1f}% ({1}/{2} measurements) +/- {3:.1f}%".format(
+                        percent_accuracy, within_10_percent, total_measurements, ci_half_width * 100))
                 elif "AU" in metric:
                     pass
                 elif "BA" in metric:
