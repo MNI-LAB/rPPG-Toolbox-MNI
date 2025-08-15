@@ -11,7 +11,7 @@ TRAIN:
     DATASET: iPadData
     DO_PREPROCESS: False              # if first time, should be true
     DATA_FORMAT: NDCHW
-    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/training"                     # Raw dataset path, need to be updated
+    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/train"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_train_preprocess"   # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
@@ -64,7 +64,7 @@ VALID:
         H: 72
         W: 72
 TEST:
-  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA']
+  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'PERCENT_ACCURACY', 'BA']
   USE_LAST_EPOCH: False                      # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30

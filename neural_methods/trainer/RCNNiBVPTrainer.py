@@ -77,7 +77,7 @@ class RCNNiBVPTrainer(BaseTrainer):
                 # where channels = [RGB channels, depth channel] (e.g., [R, G, B, D] or [G, D])
                 N, D, C, H, W = data.shape
                 
-                print(f"DEBUG: Training batch shape: {data.shape}, C={C}")  # Debug info
+                # print(f"DEBUG: Training batch shape: {data.shape}, C={C}")  # Debug info
                 
                 # For iPadData with 8 channels: [R, G, B, D, R_diff_norm, G_diff_norm, B_diff_norm, D_diff_norm]
                 if C == 8:  # iPadData with DiffNormalized + Standardized preprocessing
@@ -100,7 +100,7 @@ class RCNNiBVPTrainer(BaseTrainer):
                 self.optimizer.zero_grad()
                 pred_ppg = self.model(green_nir, depth)  # Shape: [batch, frames-1]
                 
-                print(f"DEBUG: pred_ppg shape: {pred_ppg.shape}, labels shape: {labels.shape}")  # Debug info
+                # print(f"DEBUG: pred_ppg shape: {pred_ppg.shape}, labels shape: {labels.shape}")  # Debug info
                 
                 # Labels should match the prediction shape
                 # pred_ppg is [batch, model_frames-1], labels is [batch, data_frames]

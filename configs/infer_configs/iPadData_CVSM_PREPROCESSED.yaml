@@ -1,0 +1,37 @@
+BASE: ['']
+TOOLBOX_MODE: "unsupervised_method"
+UNSUPERVISED:
+  METHOD: ["CVSM"]
+  DATA:
+    FS: 30
+    DATASET: iPadData_CVSM  # Use CVSMLoader instead of iPadDataLoader
+    DO_PREPROCESS: False     # Need to preprocess to extract 1D signals
+    DATA_FORMAT: CUSTOM
+    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/test"                    # Raw dataset path
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_CVSM_preprocessed"    # Processed dataset save path  
+    EXP_DATA_NAME: "iPadData_CVSM_test"
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: ['Raw']      # CVSMLoader extracts 1D signals, no additional processing needed
+      DATA_AUG: ['None']      # No augmentation for CVSM
+      LABEL_TYPE: Raw         # Use raw labels since we're doing unsupervised
+      DO_CHUNK: False         # CVSM works on full sequences
+      CHUNK_LENGTH: 180
+      CROP_FACE:
+        DO_CROP_FACE: False   # CVSMLoader handles face detection internally
+      RESIZE:
+        H: 72
+        W: 72
+    CVSM_ROI: 'cheek_n_nose'  # ROI for face detection (optional, defaults to cheek_n_nose)
+  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA', 'PERCENT_ACCURACY']
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+LOG:
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/cvsm_unsupervised
+INFERENCE:
+  BATCH_SIZE: 1             # Process one video at a time for unsupervised
+  EVALUATION_METHOD: "MY_FFT"  # Use FFT for heart rate estimation
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: False
+    WINDOW_SIZE: 20

@@ -8,7 +8,7 @@ from unsupervised_methods.methods.LGI import *
 from unsupervised_methods.methods.PBV import *
 from unsupervised_methods.methods.POS_WANG import *
 from unsupervised_methods.methods.OMIT import *
-from unsupervised_methods.methods.CVSM import *
+from unsupervised_methods.methods.CVSM import Depth_compensation
 from tqdm import tqdm
 from evaluation.BlandAltmanPy import BlandAltman
 
@@ -28,7 +28,8 @@ def unsupervised_predict(config, data_loader, method_name):
         batch_size = test_batch[0].shape[0]
         for idx in range(batch_size):
             data_input, labels_input = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
-            data_input = data_input[..., :3]
+            if method_name != "CVSM":   
+                data_input = data_input[..., :3]
             if method_name == "POS":
                 BVP = POS_WANG(data_input, config.UNSUPERVISED.DATA.FS)
             elif method_name == "CHROM":
@@ -44,7 +45,9 @@ def unsupervised_predict(config, data_loader, method_name):
             elif method_name == "OMIT":
                 BVP = OMIT(data_input)
             elif method_name == "CVSM":
-                BVP = CVSM(data_input, config.UNSUPERVISED.DATA.FS)
+                DEPTH = data_input[:, 1]
+                BVP = data_input[:, 0]
+                BVP = Depth_compensation(BVP, DEPTH, 1, config.UNSUPERVISED.DATA.FS)
             else:
                 raise ValueError("unsupervised method name wrong!")
 
@@ -74,6 +77,13 @@ def unsupervised_predict(config, data_loader, method_name):
                 elif config.INFERENCE.EVALUATION_METHOD == "FFT":
                     gt_fft_hr, pre_fft_hr, SNR, macc = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
                                                                     fs=config.UNSUPERVISED.DATA.FS, hr_method='FFT')
+                    gt_hr_fft_all.append(gt_fft_hr)
+                    predict_hr_fft_all.append(pre_fft_hr)
+                    SNR_all.append(SNR)
+                    MACC_all.append(macc)
+                elif config.INFERENCE.EVALUATION_METHOD == "MY_FFT":
+                    gt_fft_hr, pre_fft_hr, SNR, macc = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
+                                                                    fs=config.UNSUPERVISED.DATA.FS, hr_method='MY_FFT', use_bandpass=False, use_savgol=True, config=config)
                     gt_hr_fft_all.append(gt_fft_hr)
                     predict_hr_fft_all.append(pre_fft_hr)
                     SNR_all.append(SNR)
@@ -153,7 +163,7 @@ def unsupervised_predict(config, data_loader, method_name):
                     file_name=f'{filename_id}_Peak_BlandAltman_DifferencePlot.pdf')
             else:
                 raise ValueError("Wrong Test Metric Type")
-    elif config.INFERENCE.EVALUATION_METHOD == "FFT":
+    elif config.INFERENCE.EVALUATION_METHOD == "FFT" or config.INFERENCE.EVALUATION_METHOD == "MY_FFT":
         predict_hr_fft_all = np.array(predict_hr_fft_all)
         gt_hr_fft_all = np.array(gt_hr_fft_all)
         SNR_all = np.array(SNR_all)

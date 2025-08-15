@@ -1,0 +1,42 @@
+BASE: ['']
+TOOLBOX_MODE: "unsupervised_method"
+UNSUPERVISED:
+  METHOD: ["CVSM"]
+  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'PERCENT_ACCURACY', 'BA']
+  DATA:
+    FS: 30
+    DATASET: iPadData
+    DO_PREPROCESS: True                     # Set to True for first time processing
+    DATA_FORMAT: NDCHW
+    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/test"        # Raw dataset path
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_test_cvsm_preprocess"    # Processed dataset path
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: ['Raw']                    # Use Raw data for CVSM (needs RGBD channels)
+      LABEL_TYPE: Raw                       # Raw PPG signals for ground truth
+      DO_CHUNK: False                       # Process full videos
+      CHUNK_LENGTH: 180
+      CROP_FACE:
+        DO_CROP_FACE: False                 # CVSM handles face detection internally
+        BACKEND: 'HC'
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY: 30
+          USE_MEDIAN_FACE_BOX: False
+      RESIZE:
+        H: 480                              # Keep original iPad resolution for CVSM
+        W: 640
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+LOG:
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/ipad_cvsm_unsupervised_exp
+INFERENCE:
+  BATCH_SIZE: 1                             # Process one video at a time for CVSM
+  EVALUATION_METHOD: "FFT"                  # "FFT" or "peak detection"
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: True                # Use evaluation windows to match other methods
+    WINDOW_SIZE: 20                         # In seconds

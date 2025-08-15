@@ -32,17 +32,33 @@ class FaceMeshDetector():
         """
         self.mp_draw = mp.solutions.drawing_utils # type: ignore
         self.mp_face_mesh = mp.solutions.face_mesh # type: ignore
-        # self.face_mesh = self.mp_face_mesh.FaceMesh(static_image_mode=static_image_mode,
-        #                                             max_num_faces=max_num_faces,
-        #                                             min_detection_confidence=min_detection_confidence,
-        #                                             min_tracking_confidence=min_tracking_confidence)
-        self.face_mesh = self.mp_face_mesh.FaceMesh(static_image_mode=static_image_mode,
-                                                    max_num_faces=max_num_faces,
-                                                    refine_landmarks=True,
-                                                    min_detection_confidence=min_detection_confidence,
-                                                    min_tracking_confidence=min_tracking_confidence)
+        # Store initialization parameters for lazy loading
+        self.static_image_mode = static_image_mode
+        self.max_num_faces = max_num_faces
+        self.min_detection_confidence = min_detection_confidence
+        self.min_tracking_confidence = min_tracking_confidence
+        self.face_mesh = None  # Initialize lazily to avoid resource conflicts
         self.drawing_spec_landmark = self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=1, circle_radius=2)
         self.drawing_spec_connection = self.mp_draw.DrawingSpec(color=(255, 0, 255), thickness=2, circle_radius=2)
+    
+    def _initialize_face_mesh(self):
+        """Lazy initialization of face mesh to avoid resource conflicts in multiprocessing."""
+        if self.face_mesh is None:
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                static_image_mode=self.static_image_mode,
+                max_num_faces=self.max_num_faces,
+                refine_landmarks=True,
+                min_detection_confidence=self.min_detection_confidence,
+                min_tracking_confidence=self.min_tracking_confidence
+            )
+    
+    def __del__(self):
+        """Cleanup MediaPipe resources."""
+        if hasattr(self, 'face_mesh') and self.face_mesh is not None:
+            try:
+                self.face_mesh.close()
+            except:
+                pass  # Ignore cleanup errors
 
     def find_face_mesh(self, image: np.ndarray, draw: bool = False) -> Tuple[bool, np.ndarray]:
         """
@@ -66,13 +82,20 @@ class FaceMeshDetector():
         References:
             - Face Landmarks Key: https://github.com/tensorflow/tfjs-models/blob/master/face-landmarks-detection/mesh_map.jpg
         """
+        # Initialize face mesh lazily to avoid resource conflicts
+        self._initialize_face_mesh()
+        
         # Get image dimensions
         image_height, image_width, image_channels = image.shape
 
         # CV2 loads images/videos in BGR format, convert to RGB
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        results = self.face_mesh.process(image_rgb)
+        try:
+            results = self.face_mesh.process(image_rgb)
+        except Exception as e:
+            print(f"Warning: Face mesh processing failed: {e}")
+            return False, np.zeros((478, 2), dtype="int")
         # print(results)
 
         # landmarks_pixels is an array of shape (478, 2) with x, y coordinates (as pixels) for each landmark

@@ -107,6 +107,9 @@ class BaseLoader(Dataset):
             data = np.transpose(data, (3, 0, 1, 2))
         elif self.data_format == 'NDHWC':
             pass
+        elif self.data_format == 'CUSTOM':
+            # Data is already in format: (T, C) for CVSM
+            pass
         else:
             raise ValueError('Unsupported Data Format!')
         data = np.float32(data)

@@ -1,15 +1,15 @@
 BASE: ['']
 TOOLBOX_MODE: "only_test"      # "train_and_test"  or "only_test"
 TEST:
-  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA']
+  METRICS: ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA', 'PERCENT_ACCURACY']
   USE_LAST_EPOCH: False                      # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: True                    # if first time, should be true
+    DO_PREPROCESS: False                    # if first time, should be true
     DATA_FORMAT: NDCHW
-    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/testing"        # need to be updated for test data
-    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_preprocess_test"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/nfs/turbo/coe-mni/iPadData/test"        # need to be updated for test data
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_test_preprocess"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -33,7 +33,7 @@ TEST:
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 LOG:
-  PATH: /nfs/turbo/coe-mni/toolbox_runs/rcnn_ibvp_inference
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/rcnn_ibvp_inference_my_fft_epoch3
 MODEL:
   DROP_RATE: 0.2
   NAME: RCNNiBVP
@@ -43,8 +43,8 @@ MODEL:
     DEPTH_CHANNELS: 1    # depth channel count
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "MY_FFT"        # "FFT" or "peak detection"
   EVALUATION_WINDOW:
     USE_SMALLER_WINDOW: False        # Change this if you'd like an evaluation window smaller than the test video length
     WINDOW_SIZE: 10        # In seconds
-  MODEL_PATH: "/nfs/turbo/coe-mni/toolbox_runs/rcnn_ibvp_exp/RCNNiBVP_EpochX.pth"   # Update with actual trained model path
+  MODEL_PATH: "/nfs/turbo/coe-mni/toolbox_runs/rcnn_ibvp_exp/iPadData_SizeW72_SizeH72_ClipLength180_DataTypeDiffNormalized_Standardized_DataAugNone_LabelTypeDiffNormalized_Crop_faceTrue_BackendHC_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len30_Median_face_boxFalse/PreTrainedModels/RCNNiBVP_Epoch3.pth"   # Update with actual trained model path

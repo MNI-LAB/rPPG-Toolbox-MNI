@@ -103,9 +103,7 @@ class BlandAltman():
         # Original plot with variable axes
         fig = plt.figure(figsize=figure_size)
         ax=fig.add_axes([0,0,1,1])
-        xy = np.vstack([self.gold_std,self.new_measure])
-        z = gaussian_kde(xy)(xy)
-        ax.scatter(self.gold_std,self.new_measure, c=z, s=50)
+        ax.scatter(self.gold_std,self.new_measure, c='blue', s=50, alpha=0.7)
         x_vals = np.array(ax.get_xlim())
         ax.plot(x_vals,x_vals,'--',color='black', label='Line of Slope = 1')
         ax.set_xlabel(x_label)
@@ -117,20 +115,20 @@ class BlandAltman():
         plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=300)
         print(f"Saved {file_name} to {self.save_path}.")
         
-        # Additional plot with fixed axes 0 to 100
+        # Additional plot with fixed axes appropriate for heart rate data
         fig2 = plt.figure(figsize=figure_size)
         ax2 = fig2.add_axes([0,0,1,1])
-        ax2.scatter(self.gold_std,self.new_measure, c=z, s=50)
-        ax2.plot([0, 100], [0, 100],'--',color='black', label='Line of Slope = 1')  # Line from (0,0) to (100,100)
+        ax2.scatter(self.gold_std,self.new_measure, c='blue', s=50, alpha=0.7)
+        ax2.plot([40, 140], [40, 140],'--',color='black', label='Line of Slope = 1')  # Line from (40,40) to (140,140)
         ax2.set_xlabel(x_label)
         ax2.set_ylabel(y_label)
         ax2.set_title(the_title)
         ax2.grid()
-        plt.xlim(0, 100)
-        plt.ylim(0, 100)
+        plt.xlim(40, 140)
+        plt.ylim(40, 140)
         
         # Create fixed axes filename
-        fixed_file_name = file_name.replace('.pdf', '_fixed50.pdf')
+        fixed_file_name = file_name.replace('.pdf', '_fixed_hr_range.pdf')
         plt.savefig(os.path.join(self.save_path, fixed_file_name),bbox_inches='tight', dpi=300)
         print(f"Saved {fixed_file_name} to {self.save_path}.")
 
@@ -150,9 +148,7 @@ class BlandAltman():
         # Original plot with variable axes
         fig = plt.figure(figsize=figure_size)
         ax = fig.add_axes([0,0,1,1])
-        xy = np.vstack([avgs,diffs])
-        z = gaussian_kde(xy)(xy)
-        ax.scatter(avgs,diffs, c=z, label='Observations')
+        ax.scatter(avgs,diffs, c='blue', alpha=0.7, label='Observations')
         x_vals = np.array(ax.get_xlim())
         ax.axhline(self.mean_error,color='black',label='Mean Error')
         ax.axhline(self.CI95[0],color='black',linestyle='--',label='+95% Confidence Interval')
@@ -166,10 +162,10 @@ class BlandAltman():
         plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=100)
         print(f"Saved {file_name} to {self.save_path}.")
         
-        # Additional plot with fixed axes at 50
+        # Additional plot with fixed axes appropriate for heart rate data
         fig2 = plt.figure(figsize=figure_size)
         ax2 = fig2.add_axes([0,0,1,1])
-        ax2.scatter(avgs,diffs, c=z, label='Observations')
+        ax2.scatter(avgs,diffs, c='blue', alpha=0.7, label='Observations')
         ax2.axhline(self.mean_error,color='black',label='Mean Error')
         ax2.axhline(self.CI95[0],color='black',linestyle='--',label='+95% Confidence Interval')
         ax2.axhline(self.CI95[1],color='black',linestyle='--',label='-95% Confidence Interval')
@@ -179,10 +175,11 @@ class BlandAltman():
         if show_legend:
             ax2.legend()
         ax2.grid()
-        plt.xlim(-50, 50)
+        # Set appropriate ranges for heart rate data (40-140 BPM for x-axis, ±50 for differences)
+        plt.xlim(40, 140)
         plt.ylim(-50, 50)
         
         # Create fixed axes filename
-        fixed_file_name = file_name.replace('.pdf', '_fixed50.pdf')
+        fixed_file_name = file_name.replace('.pdf', '_fixed_hr_range.pdf')
         plt.savefig(os.path.join(self.save_path, fixed_file_name),bbox_inches='tight', dpi=100)
         print(f"Saved {fixed_file_name} to {self.save_path}.")

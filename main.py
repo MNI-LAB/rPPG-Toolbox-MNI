@@ -140,6 +140,8 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.BigSmallTrainer.BigSmallTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysFormer':
         model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'DualStreamPhysFormer':
+        model_trainer = trainer.DualStreamPhysFormerTrainer.DualStreamPhysFormerTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysMamba':
         model_trainer = trainer.PhysMambaTrainer.PhysMambaTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'RhythmFormer':
@@ -172,6 +174,8 @@ def test(config, data_loader_dict):
         model_trainer = trainer.BigSmallTrainer.BigSmallTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysFormer':
         model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'DualStreamPhysFormer':
+        model_trainer = trainer.DualStreamPhysFormerTrainer.DualStreamPhysFormerTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysMamba':
         model_trainer = trainer.PhysMambaTrainer.PhysMambaTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'RhythmFormer':
@@ -392,6 +396,8 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.iBVPLoader.iBVPLoader
         elif config.UNSUPERVISED.DATA.DATASET == "iPadData":
             unsupervised_loader = data_loader.iPadDataLoader.iPadDataLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "iPadData_CVSM":
+            unsupervised_loader = data_loader.CVSMLoader.CVSMLoader
         else:
             raise ValueError("Unsupervised dataset not supported! Currently supporting UBFC-rPPG, PURE, MMPD, \
                              SCAMPS, BP4D+, UBFC-PHYS, iBVP, and iPadData.")
@@ -403,7 +409,7 @@ if __name__ == "__main__":
             device=config.DEVICE)
         data_loader_dict["unsupervised"] = DataLoader(
             dataset=unsupervised_data,
-            num_workers=16,
+            num_workers=0,  # Set to 0 to prevent memory issues and worker conflicts
             batch_size=1,
             shuffle=False,
             worker_init_fn=seed_worker,

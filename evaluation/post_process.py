@@ -2,12 +2,14 @@
 The file also  includes helper funcs such as detrend, power2db etc.
 """
 
+import os
 import numpy as np
 import scipy
 import scipy.io
 from scipy.signal import butter
 from scipy.sparse import spdiags
 from copy import deepcopy
+import matplotlib.pyplot as plt
 
 def _next_power_of_2(x):
     """Calculate the nearest power of 2."""
@@ -87,6 +89,94 @@ def _compute_macc(pred_signal, gt_signal):
     macc = max(tlcc_list)
     return macc
 
+def find_HR(intensity, config, name, fps, video_index=None):
+    """
+    Calculate heart rate using MY_FFT method (based on original CVSM approach).
+    This method uses simple FFT without zero-padding and generates diagnostic plots.
+    
+    Args:
+        intensity: PPG signal
+        config: Configuration object
+        name: Name for saving plots ('pred' or 'label')
+        fps: Sampling frequency
+        video_index: Unique identifier for the video/clip (to avoid overwriting plots)
+        
+    Returns:
+        HR: Estimated heart rate in BPM
+    """
+    # Perform FFT analysis
+    Intensity_freq = np.fft.rfft(intensity)
+    X_final = np.abs(Intensity_freq)
+
+    # Create frequency axis in BPM
+    freq = np.fft.rfftfreq(len(intensity), 1.0 / fps) * 60.0
+    
+    # Filter to physiological heart rate range
+    mask = (freq >= 50) & (freq <= 150)
+    freq_filtered = freq[mask]
+    hr_arr = X_final[mask]
+    
+    # Find peak frequency
+    if len(hr_arr) > 0:
+        HR = freq_filtered[np.argmax(hr_arr)]
+    else:
+        print(f"Warning: No valid frequencies found in range 50-150 BPM for {name}")
+        HR = 75.0  # Default fallback
+    
+    # Generate diagnostic plots
+    try:
+        # Create unique filename using video_index
+        if video_index is not None:
+            # Clean the video_index for use in filename (remove special characters)
+            clean_index = str(video_index).replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+            file_prefix = f"{name}_{clean_index}"
+        else:
+            file_prefix = name
+        
+        # HR frequency spectrum plot
+        file_name = f'{file_prefix}_HR_diagram.pdf'
+        save_path = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'HR_diagram', name)
+        os.makedirs(save_path, exist_ok=True)
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(freq_filtered, hr_arr, 'b-', linewidth=2)
+        plt.axvline(HR, color='red', linestyle='--', linewidth=2, 
+                   label=f'Peak: {HR:.1f} BPM')
+        plt.xlabel('Frequency (BPM)')
+        plt.ylabel('FFT Magnitude')
+        title_text = f'HR Frequency Spectrum - {name.upper()}'
+        if video_index is not None:
+            title_text += f' (Video: {video_index})'
+        plt.title(title_text)
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.xlim(50, 150)
+        plt.savefig(os.path.join(save_path, file_name), bbox_inches='tight', dpi=300)
+        plt.close()
+        
+        # Time domain waveform plot
+        save_path = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'waveform', name)
+        os.makedirs(save_path, exist_ok=True)
+        file_name = f'{file_prefix}_waveform.pdf'
+        
+        time_axis = np.arange(len(intensity)) / fps
+        plt.figure(figsize=(12, 6))
+        plt.plot(time_axis, intensity, 'b-', linewidth=1, alpha=0.8)
+        plt.xlabel('Time (seconds)')
+        plt.ylabel('PPG Amplitude')
+        title_text = f'PPG Waveform - {name.upper()} (Estimated HR: {HR:.1f} BPM)'
+        if video_index is not None:
+            title_text += f' - Video: {video_index}'
+        plt.title(title_text)
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(save_path, file_name), bbox_inches='tight', dpi=300)
+        plt.close()
+        
+    except Exception as e:
+        print(f"Warning: Could not save diagnostic plots for {name}: {e}")
+
+    return HR
+
 def _calculate_SNR(pred_ppg_signal, hr_label, fs=30, low_pass=0.6, high_pass=3.3):
     """Calculate SNR as the ratio of the area under the curve of the frequency spectrum around the first and second harmonics 
         of the ground truth HR frequency to the area under the curve of the remainder of the frequency spectrum, from 0.6 Hz
@@ -142,7 +232,7 @@ def _calculate_SNR(pred_ppg_signal, hr_label, fs=30, low_pass=0.6, high_pass=3.3
         SNR = 0
     return SNR
 
-def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_bandpass=True, hr_method='FFT'):
+def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_bandpass=True, use_savgol=True, hr_method='FFT', config=None, video_index=None):
     """Calculate video-level HR and SNR"""
     if diff_flag:  # if the predictions and labels are 1st derivative of PPG signal.
         predictions = _detrend(np.cumsum(predictions), 100)
@@ -160,7 +250,10 @@ def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_b
         [b, a] = butter(1, [0.6 / fs * 2, 3.3 / fs * 2], btype='bandpass')
         predictions = scipy.signal.filtfilt(b, a, np.double(predictions))
         labels = scipy.signal.filtfilt(b, a, np.double(labels))
-    
+    if use_savgol:
+        predictions = scipy.signal.savgol_filter(predictions, 5, 2)
+        labels = scipy.signal.savgol_filter(labels, 5, 2)
+
     macc = _compute_macc(predictions, labels)
 
     if hr_method == 'FFT':
@@ -169,6 +262,9 @@ def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_b
     elif hr_method == 'Peak':
         hr_pred = _calculate_peak_hr(predictions, fs=fs)
         hr_label = _calculate_peak_hr(labels, fs=fs)
+    elif hr_method == 'MY_FFT':
+        hr_pred = find_HR(predictions, config, 'pred', fps=fs, video_index=video_index)
+        hr_label = find_HR(labels, config, 'label', fps=fs, video_index=video_index)
     else:
         raise ValueError('Please use FFT or Peak to calculate your HR.')
     SNR = _calculate_SNR(predictions, hr_label, fs=fs)
