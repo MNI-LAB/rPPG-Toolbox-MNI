@@ -163,7 +163,7 @@ def calculate_metrics(predictions, labels, config):
                         # Use savgol filter
                         # This allows comparison between bandpass vs Savgol-only preprocessing approaches
                         gt_hr_my_fft, pred_hr_my_fft, SNR, macc = calculate_metric_per_video(
-                            pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='MY_FFT', use_bandpass=False, use_savgol=True, config=config, video_index=index)
+                            pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='MY_FFT', use_bandpass=True, use_savgol=False, config=config, video_index=index)
                         gt_hr_fft_all.append(gt_hr_my_fft)
                         predict_hr_fft_all.append(pred_hr_my_fft)
                         SNR_all.append(SNR)
