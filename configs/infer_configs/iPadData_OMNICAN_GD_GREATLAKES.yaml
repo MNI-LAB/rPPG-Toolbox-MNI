@@ -33,14 +33,14 @@ TEST:
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 LOG:
-  PATH: /nfs/turbo/coe-mni/toolbox_runs/omnican_gd_tvt_exp_epoch19_my_fft
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/omnican_gd_tvt_exp_epoch19_my_fft_bandpass
 MODEL:
   DROP_RATE: 0.2
   NAME: OMNICAN
   OMNICAN:
     FRAME_DEPTH: 10
 INFERENCE:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 1
   EVALUATION_METHOD: "MY_FFT"        # "FFT" or "peak detection" or "MY_FFT"
   EVALUATION_WINDOW:
     USE_SMALLER_WINDOW: False        # Change this if you'd like an evaluation window smaller than the test video length
