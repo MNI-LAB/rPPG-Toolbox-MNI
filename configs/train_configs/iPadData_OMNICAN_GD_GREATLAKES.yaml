@@ -1,7 +1,7 @@
 BASE: ['']
 TOOLBOX_MODE: "train_and_test"      # "train_and_test"  or "only_test"
 TRAIN:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 1
   EPOCHS: 20
   LR: 9e-3
   MODEL_FILE_NAME: OMNICAN_GD
@@ -9,10 +9,10 @@ TRAIN:
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: False              # if first time, should be true
+    DO_PREPROCESS: True              # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/nfs/turbo/coe-mni/iPadData/train"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_train_preprocess"   # Processed dataset save path, need to be updated
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_train_preprocess_do_chunk"   # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -20,8 +20,8 @@ TRAIN:
       DATA_TYPE: ['DiffNormalized','Standardized']
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: DiffNormalized
-      DO_CHUNK: False
-      CHUNK_LENGTH: 180
+      DO_CHUNK: True
+      CHUNK_LENGTH: 145
       CROP_FACE:
         DO_CROP_FACE: True
         BACKEND: 'HC'    # HC for Haar Cascade, RF for RetinaFace
@@ -38,10 +38,10 @@ VALID:
   DATA:
     FS: 30
     DATASET: iPadData
-    DO_PREPROCESS: False                  # if first time, should be true
+    DO_PREPROCESS: True                  # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/nfs/turbo/coe-mni/iPadData/valid"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_valid_preprocess"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_valid_preprocess_do_chunk"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -49,8 +49,8 @@ VALID:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: DiffNormalized
-      DO_CHUNK: False
-      CHUNK_LENGTH: 180
+      DO_CHUNK: True
+      CHUNK_LENGTH: 145
       CROP_FACE:
         DO_CROP_FACE: True
         BACKEND: 'HC'    # HC for Haar Cascade, RF for RetinaFace
@@ -72,15 +72,15 @@ TEST:
     DO_PREPROCESS: False                    # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH:  "/nfs/turbo/coe-mni/iPadData/test"        # need to be updated
-    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_test_preprocess"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/nfs/turbo/coe-mni/iPadData_test_preprocess_do_chunk"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       LABEL_TYPE: DiffNormalized
-      DO_CHUNK: False
-      CHUNK_LENGTH: 180
+      DO_CHUNK: True
+      CHUNK_LENGTH: 145
       CROP_FACE:
         DO_CROP_FACE: True
         BACKEND: 'HC'    # HC for Haar Cascade, RF for RetinaFace
@@ -96,15 +96,15 @@ TEST:
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 LOG:
-  PATH: /nfs/turbo/coe-mni/toolbox_runs/omnican_gd_tvt_exp
+  PATH: /nfs/turbo/coe-mni/toolbox_runs/omnican_gd_tvt_exp_do_chunk
 MODEL:
   DROP_RATE: 0.2
   NAME: OMNICAN
   OMNICAN:
     FRAME_DEPTH: 10
 INFERENCE:
-  BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  BATCH_SIZE: 1
+  EVALUATION_METHOD: "MY_FFT"        # "FFT" or "peak detection"
   EVALUATION_WINDOW:
     USE_SMALLER_WINDOW: False        # Change this if you'd like an evaluation window smaller than the test video length
     WINDOW_SIZE: 20        # In seconds

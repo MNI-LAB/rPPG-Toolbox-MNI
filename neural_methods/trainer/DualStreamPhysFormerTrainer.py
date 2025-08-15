@@ -119,34 +119,31 @@ class DualStreamPhysFormerTrainer(BaseTrainer):
             for idx, batch in enumerate(tbar):
                 hr = torch.tensor([self.get_hr(i) for i in batch[1]]).float().to(self.device)
                 
-                # Handle dual-stream data
-                if len(batch) >= 3:  # batch[0] = rgb_data, batch[2] = depth_data, batch[1] = label
-                    data, labels = batch[0].to(
-                        self.device), batch[1].to(self.device)
-                    print(data.shape) #[1, 600, 4, 128, 128] contains rgb and depth
-                    print(labels.shape) # [1, 600] contains label
-                    
-                    # split data into rgb and depth
-                    rgb_data = data[:, 1:2, :, :]
-                    depth_data = data[:, 3:4, :, :]
-                    label = labels.view(-1, 1)
-                    # TODO: change model to accept only depth and green
-                    # might need to change model initialization or .yaml file.
-                    exit()
-                    
-                    
-                    rgb_data = torch.stack(batch[0]).float().to(self.device)
-                    depth_data = torch.stack(batch[2]).float().to(self.device)
-                    label = torch.stack(batch[1]).float().to(self.device)
+                # batch[0] = rgb_data, batch[2] = depth_data, batch[1] = label
+                data, label = batch[0].to(
+                    self.device), batch[1].to(self.device)
+                data = data[:, :580, :, :, :]
+                # label NEEDS format: [batch size, # frames]
+                if label.shape[0] > label.shape[1]: # [600, 1]
+                    label = label[:580]
+                    label = label.view(-1, 1) # now it's [1, 580]
                 else:
-                    assert False, "Dual-stream data is required for training"
-                    exit()
+                    label = label[:, :580] 
+                    
+                # Split data into rgb and depth based on channel structure
+                rgb_data = data[:, :, :3, :, :]  # First 3 channels for RGB [B, 3, 600(or any other frame length), 128, 128]
+                depth_data = data[:, :, 3:4, :, :]  # 4th channel for depth [B, 1, 600(or any other frame length), 128, 128]
+                
+                # Reshape rgb and depth data to [B, 3, 580, 128, 128] and [B, 1, 580, 128, 128]
+                rgb_data = rgb_data.reshape(rgb_data.shape[0], 3, 580, 128, 128)
+                depth_data = depth_data.reshape(depth_data.shape[0], 1, 580, 128, 128)
 
                 self.optimizer.zero_grad()
 
                 gra_sharp = 2.0
                 rPPG, _, _, _ = self.model(rgb_data, depth_data, gra_sharp)
                 rPPG = (rPPG-torch.mean(rPPG, axis=-1).view(-1, 1))/torch.std(rPPG, axis=-1).view(-1, 1)    # normalize
+                
                 loss_rPPG = self.criterion_Pearson(rPPG, label)
 
                 fre_loss = 0.0
@@ -232,30 +229,34 @@ class DualStreamPhysFormerTrainer(BaseTrainer):
             vbar = tqdm(data_loader["valid"], ncols=80)
             for val_idx, val_batch in enumerate(vbar):
                 # Handle dual-stream validation data
-                if len(val_batch) >= 3:
-                    if isinstance(val_batch[0], list):
-                        rgb_data = torch.stack(val_batch[0]).float().to(self.device)
-                        depth_data = torch.stack(val_batch[2]).float().to(self.device)
-                        label = torch.stack(val_batch[1]).float().to(self.device)
-                    else:
-                        rgb_data, label, depth_data = val_batch[0].float().to(self.device), val_batch[1].float().to(self.device), val_batch[2].float().to(self.device)
+                data, label = val_batch[0].to(self.device), val_batch[1].to(self.device)
+                
+                data = data[:, :580, :, :, :]
+                
+                # label NEEDS format: [batch size, # frames]
+                if label.shape[0] > label.shape[1]: # [600, 1]
+                    label = label[:580]
+                    label = label.view(-1, 1) # now it's [1, 580]
                 else:
-                    # Fallback: duplicate single stream data
-                    if isinstance(val_batch[0], list):
-                        rgb_data = torch.stack(val_batch[0]).float().to(self.device)
-                        depth_data = torch.stack(val_batch[0]).float().to(self.device)
-                        label = torch.stack(val_batch[1]).float().to(self.device)
-                    else:
-                        rgb_data = val_batch[0].float().to(self.device)
-                        depth_data = val_batch[0].float().to(self.device)
-                        label = val_batch[1].float().to(self.device)
+                    label = label[:, :580] 
+                    
+
+                # Split data into rgb and depth based on channel structure
+                rgb_data = data[:, :, :3, :, :]  # First 3 channels for RGB [B, 3, 600(or any other frame length), 128, 128]
+                depth_data = data[:, :, 3:4, :, :]  # 4th channel for depth [B, 1, 600(or any other frame length), 128, 128]
+
+                # Reshape rgb and depth data to [B, 3, 580, 128, 128] and [B, 1, 580, 128, 128]
+                rgb_data = rgb_data.reshape(rgb_data.shape[0], 3, 580, 128, 128)
+                depth_data = depth_data.reshape(depth_data.shape[0], 1, 580, 128, 128)
                     
                 gra_sharp = 2.0
                 rPPG, _, _, _ = self.model(rgb_data, depth_data, gra_sharp)
-                rPPG = (rPPG-torch.mean(rPPG, axis=-1).view(-1, 1))/torch.std(rPPG).view(-1, 1)
+                rPPG = (rPPG-torch.mean(rPPG, axis=-1).view(-1, 1))/torch.std(rPPG).view(-1, 1) # output shape = [1, 580]
+                
                 for _1, _2 in zip(rPPG, label):
                     hrs.append((self.get_hr(_1.cpu().detach().numpy()), self.get_hr(_2.cpu().detach().numpy())))
             RMSE = np.mean([(i-j)**2 for i, j in hrs])**0.5
+            print(f'HRs (pred, GT): {hrs}')
         return RMSE
 
     def test(self, data_loader):
@@ -299,24 +300,19 @@ class DualStreamPhysFormerTrainer(BaseTrainer):
             for _, test_batch in enumerate(tqdm(data_loader["test"], ncols=80)):
                 batch_size = test_batch[0].shape[0]
                 
-                # Handle dual-stream test data
-                if len(test_batch) >= 3:
-                    if isinstance(test_batch[0], list):
-                        rgb_data = torch.stack(test_batch[0]).to(self.config.DEVICE)
-                        depth_data = torch.stack(test_batch[2]).to(self.config.DEVICE)
-                        label = torch.stack(test_batch[1]).to(self.config.DEVICE)
-                    else:
-                        rgb_data, label, depth_data = test_batch[0].to(self.config.DEVICE), test_batch[1].to(self.config.DEVICE), test_batch[2].to(self.config.DEVICE)
+                data, label = test_batch[0].to(self.config.DEVICE), test_batch[1].to(self.config.DEVICE)
+                data = data[:, :580, :, :, :]
+                # label NEEDS format: [batch size, # frames]
+                if label.shape[0] > label.shape[1]: # [600, 1]
+                    label = label[:580]
+                    label = label.view(-1, 1) # now it's [1, 580]
                 else:
-                    # Fallback: duplicate single stream data
-                    if isinstance(test_batch[0], list):
-                        rgb_data = torch.stack(test_batch[0]).to(self.config.DEVICE)
-                        depth_data = torch.stack(test_batch[0]).to(self.config.DEVICE)
-                        label = torch.stack(test_batch[1]).to(self.config.DEVICE)
-                    else:
-                        rgb_data = test_batch[0].to(self.config.DEVICE)
-                        depth_data = test_batch[0].to(self.config.DEVICE)
-                        label = test_batch[1].to(self.config.DEVICE)
+                    label = label[:, :580] 
+                # Split data into rgb and depth based on channel structure
+                rgb_data = data[:, :, :3, :, :]  # First 3 channels for RGB [B, 3, 600(or any other frame length), 128, 128]
+                depth_data = data[:, :, 3:4, :, :]  # 4th channel for depth [B, 1, 600(or any other frame length), 128, 128]
+                rgb_data = rgb_data.reshape(rgb_data.shape[0], 3, 580, 128, 128)
+                depth_data = depth_data.reshape(depth_data.shape[0], 1, 580, 128, 128)
                     
                 gra_sharp = 2.0
                 pred_ppg_test, _, _, _ = self.model(rgb_data, depth_data, gra_sharp)

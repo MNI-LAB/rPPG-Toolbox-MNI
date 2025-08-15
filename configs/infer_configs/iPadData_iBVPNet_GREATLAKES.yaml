@@ -17,7 +17,7 @@ TEST:
       DATA_TYPE: ['Raw']         #if use iBVPNet, should be Raw
       LABEL_TYPE: DiffNormalized
       DO_CHUNK: False
-      CHUNK_LENGTH: 160
+      CHUNK_LENGTH: 580
       CROP_FACE:
         DO_CROP_FACE: False
         BACKEND: 'HC'    # HC for Haar Cascade, Y5F for YOLO5Face

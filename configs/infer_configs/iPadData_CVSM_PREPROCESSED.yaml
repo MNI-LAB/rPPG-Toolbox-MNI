@@ -17,7 +17,7 @@ UNSUPERVISED:
       DATA_AUG: ['None']      # No augmentation for CVSM
       LABEL_TYPE: Raw         # Use raw labels since we're doing unsupervised
       DO_CHUNK: False         # CVSM works on full sequences
-      CHUNK_LENGTH: 180
+      CHUNK_LENGTH: 580
       CROP_FACE:
         DO_CROP_FACE: False   # CVSMLoader handles face detection internally
       RESIZE:

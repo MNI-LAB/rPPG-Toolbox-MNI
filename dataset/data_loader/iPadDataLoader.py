@@ -115,16 +115,32 @@ class iPadDataLoader(BaseLoader):
         else:
             raise ValueError(f'Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}.')
 
+        # Ensure all sequences have exactly 580 frames
+        target_length = 580
+        if frames.shape[0] < target_length:
+            # Pad shorter sequences by repeating the last frame
+            padding_frames = np.tile(frames[-1:], (target_length - frames.shape[0], 1, 1, 1))
+            frames = np.concatenate([frames, padding_frames], axis=0)
+        elif frames.shape[0] > target_length:
+            # Truncate longer sequences to 580 frames
+            frames = frames[:target_length]
+        
         # Read Labels
         if config_preprocess.USE_PSUEDO_PPG_LABEL:
             bvps = self.generate_pos_psuedo_labels(frames, fs=self.config_data.FS)
         else:
             bvps = self.read_wave(
                 os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
-        if bvps.shape[0] == frames.shape[0]:
-            print(f"Warning: {filename} has different length of frames and labels.")
-        target_length = frames.shape[0]
-        bvps = BaseLoader.resample_ppg(bvps, target_length)
+        
+        # Ensure labels also have exactly 580 samples
+        if bvps.shape[0] > target_length:
+            # simply trim the bvps to the target length
+            bvps = bvps[:target_length]
+        elif bvps.shape[0] < target_length:
+            # Pad shorter sequences by repeating the last frame
+            padding_frames = np.tile(bvps[-1:], (target_length - bvps.shape[0], 1))
+            bvps = np.concatenate([bvps, padding_frames], axis=0)
+        
         frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
         input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
         file_list_dict[i] = input_name_list

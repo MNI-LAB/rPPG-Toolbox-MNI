@@ -198,7 +198,7 @@ class DualStreamPhysFormer(nn.Module):
         classifier: str = 'token',
         in_channels_rgb: int = 3, 
         in_channels_depth: int = 1,
-        frame: int = 160,
+        frame: int = 580,
         theta: float = 0.2,
         image_size: Optional[int] = None,
         rgb_stem_channels: Optional[list] = None,
@@ -323,58 +323,56 @@ class DualStreamPhysFormer(nn.Module):
             depth_data: Depth video data [B, 1, T, H, W]
             gra_sharp: Gradient sharpening parameter
         """
+        self.frame = rgb_data.shape[1] # Handles variable frame length inputs
+        b, c, t, h, w = rgb_data.shape # batch size, # channels, t frames, height, width
+        
+        
         # Process RGB stream
         rgb_features = self.rgb_stem0(rgb_data)
         rgb_features = self.rgb_stem1(rgb_features)
         rgb_features = self.rgb_stem2(rgb_features)  # [B, rgb_channels, T, H, W]
+        
+        # print(f"rgb_features shape: {rgb_features.shape}") # [1, 96, 580, 16, 16]
         
         # Process depth stream
         depth_features = self.depth_stem0(depth_data)
         depth_features = self.depth_stem1(depth_features)
         depth_features = self.depth_stem2(depth_features)  # [B, depth_channels, T, H, W]
         
+        # print(f"depth_features shape: {depth_features.shape}") # [1, 48, 580, 16, 16]
+        
         # Feature fusion: concatenate along channel dimension
-        fused_features = torch.cat([rgb_features, depth_features], dim=1)  # [B, total_channels, T, H, W]
+        fused_features = torch.cat([rgb_features, depth_features], dim=1) 
         
         # Apply feature fusion layer to get unified representation
+        # combines rgb + depth into single feature space
         fused_features = self.feature_fusion(fused_features)  # [B, dim, T, H, W]
         
+        # print(f"fused_features shape: {fused_features.shape}") # [1, 96, 580, 16, 16] = 222720
+        
+        # save fused feature shape for later upsampling
+        f_b, f_dim, f_t, f_h, f_w = fused_features.shape
+        
         # Patch embedding
-        x = self.patch_embedding(fused_features)  # [B, dim, T//4, H//16, W//16]
-        x = x.flatten(2).transpose(1, 2)  # [B, (T//4)*(H//16)*(W//16), dim]
+        x = self.patch_embedding(fused_features)
+        x = x.flatten(2).transpose(1, 2)
+        
+        # print(f"x shape: {x.shape}") # [1, 2320, 96] = 222720
         
         # Transformer processing
         Trans_features, Score1 = self.transformer1(x, gra_sharp)
         Trans_features2, Score2 = self.transformer2(Trans_features, gra_sharp)
         Trans_features3, Score3 = self.transformer3(Trans_features2, gra_sharp)
         
-        # Upsampling and final processing
-        b = rgb_data.shape[0]
-        
-        # Reshape transformer output to the correct spatial dimensions
-        # The transformer output sequence length should match the expected spatial dimensions
-        # With (4, 8, 8) patches and input (160, 128, 128):
-        # - After stems: (160, 16, 16) -> (40, 2, 2) -> flattened to 160
-        # - Transformer processes 160 and outputs 160
-        # - We need to reshape 160 back to (40, 2, 2) for upsampling
-        
-        # Calculate the expected spatial dimensions after patch embedding
-        # The stems reduce spatial dimensions by 8x (3 MaxPool3d layers with stride 2)
-        # So if input is (160, 128, 128), after stems it becomes (160, 16, 16)
-        # With patches (4, 8, 8), we get (40, 2, 2) after patch embedding
-        # The transformer processes 40*2*2 = 160 sequence length
-        
-        # Calculate dimensions after stems
-        t = self.frame  # 160
-        h = as_tuple(self.image_size)[1] // 8  # 128 // 8 = 16
-        w = as_tuple(self.image_size)[2] // 8  # 128 // 8 = 16
-        
-        # Calculate dimensions after patch embedding
-        ft, fh, fw = as_tuple(self.patch_size)
-        gt, gh, gw = t//ft, h//fh, w//fw  # 160//4, 16//8, 16//8 = 40, 2, 2
-        
-        # Reshape to the calculated dimensions
-        features_last = Trans_features3.transpose(1, 2).view(b, self.dim, gt, gh, gw)
+        # print(f"Trans_features3 shape: {Trans_features3.shape}") # [1, 2320, 96] = 222720
+
+        # Convert back to fused features dimension
+        # Revert transformer output back to spatial format
+        # Reverse the operations: x = x.flatten(2).transpose(1, 2)
+        # First transpose back: (1, 2) -> (2, 1)
+        # Then unflatten: restore spatial dimensions
+        features_last = Trans_features3.transpose(1, 2)  # [B, dim, seq_len]
+        features_last = features_last.view(f_b, f_dim, f_t//4, f_h//4, f_w//4)  # [B, dim, T//4, H//4, W//4]
         
         features_last = self.upsample(features_last)
         features_last = self.upsample2(features_last)
@@ -384,5 +382,5 @@ class DualStreamPhysFormer(nn.Module):
         rPPG = self.ConvBlockLast(features_last)        # Final 1D convolution
         
         rPPG = rPPG.squeeze(1)
-        
+
         return rPPG, Score1, Score2, Score3
