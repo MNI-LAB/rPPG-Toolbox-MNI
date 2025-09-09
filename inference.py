@@ -13,7 +13,27 @@ import matplotlib.pyplot as plt
 from neural_methods.model.OMNI_CAN import OMNICAN
 from evaluation import post_process as pp
 from dataset.data_loader.BaseLoader import BaseLoader
+def face_crop(frame):
+    detector = cv2.CascadeClassifier(
+        './dataset/haarcascade_frontalface_default.xml')
 
+    # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
+    # (x,y) corresponds to the top-left corner of the zone to define using
+    # the computed width and height.
+    face_zone = detector.detectMultiScale(frame[:, :, :3].astype(np.uint8))
+
+    if len(face_zone) < 1:
+        print("ERROR: No Face Detected")
+        face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
+    elif len(face_zone) >= 2:
+        # Find the index of the largest face zone
+        # The face zones are boxes, so the width and height are the same
+        max_width_index = np.argmax(face_zone[:, 2])  # Index of maximum width
+        face_box_coor = face_zone[max_width_index]
+        print("Warning: More than one faces are detected. Only cropping the biggest one.")
+    else:
+        face_box_coor = face_zone[0]   
+    return face_box_coor
 
 def _list_clip_dirs(root_dir: str, max_clips: int = 10) -> List[str]:
     candidates = sorted([p for p in glob.glob(os.path.join(root_dir, '*')) if os.path.isdir(p)])
@@ -41,7 +61,15 @@ def _read_rgbd_frames(clip_dir: str, display_frames: bool = True) -> Tuple[np.nd
             continue
         if depth.ndim == 3:
             depth = depth[:, :, :1]
-        intensity = intensity[:, :, :1]
+        intensity = intensity[:, :, 1:2]
+        
+        # Face cropping
+        face_region = face_crop(intensity)
+        intensity = intensity[max(face_region[1], 0):min(face_region[1] + face_region[3], intensity.shape[0]),
+                    max(face_region[0], 0):min(face_region[0] + face_region[2], intensity.shape[1])]
+        depth = depth[max(face_region[1], 0):min(face_region[1] + face_region[3], depth.shape[0]),
+                max(face_region[0], 0):min(face_region[0] + face_region[2], depth.shape[1])]
+        
         # Resize intensity to match depth spatial size if needed
         if intensity.shape[:2] != depth.shape[:2]:
             intensity = cv2.resize(intensity, (depth.shape[1], depth.shape[0]))
@@ -421,7 +449,7 @@ def run_inference(root_dir: str, checkpoint_path: str, fs: int = 30, frame_depth
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default=r'D:\Github repos\data-collector\Data\2025-09-04_17-36-45_Yang', help='Root directory containing clip subfolders')
+    parser.add_argument('--data_dir', type=str, default=r'D:\Github repos\data-collector\Data', help='Root directory containing clip subfolders')
     parser.add_argument('--checkpoint', type=str, default=os.path.join('neural_methods', 'checkpoints', 'OMNICAN_GD_Epoch19.pth'))
     parser.add_argument('--fs', type=int, default=30)
     parser.add_argument('--frame_depth', type=int, default=10)
