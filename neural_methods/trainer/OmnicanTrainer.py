@@ -12,6 +12,7 @@ from neural_methods.loss.NegPearsonLoss import Neg_Pearson
 from neural_methods.model.OMNI_CAN import OMNICAN
 from neural_methods.trainer.BaseTrainer import BaseTrainer
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 class OmnicanTrainer(BaseTrainer):
@@ -35,6 +36,10 @@ class OmnicanTrainer(BaseTrainer):
         if config.TOOLBOX_MODE == "train_and_test":
             self.model = OMNICAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
             self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
+            # if model_path is specified, load the model
+            # if config.INFERENCE.MODEL_PATH != "":
+            #     self.model.load_state_dict(torch.load(config.INFERENCE.MODEL_PATH))
+            #     print(f"Continue training using pretrained model!: {}")
 
             self.num_train_batches = len(data_loader["train"])
             self.criterion = torch.nn.MSELoss()
@@ -51,6 +56,24 @@ class OmnicanTrainer(BaseTrainer):
 
     def train(self, data_loader):
         """Training routine for model"""
+        # Original Channels (0-4):
+        # Channel 0: Red (raw)
+        # Channel 1: Green (raw)
+        # Channel 2: Blue (raw)
+        # Channel 3: NIR/Intensity (raw) ← This is what your model currently uses
+        # Channel 4: Depth (raw)
+        # DiffNormalized Channels (5-9):
+        # Channel 5: Red (diff normalized)
+        # Channel 6: Green (diff normalized) ← You might want this instead
+        # Channel 7: Blue (diff normalized)
+        # Channel 8: NIR/Intensity (diff normalized) ← You might want this instead
+        # Channel 9: Depth (diff normalized) ← You might want this instead
+        # Standardized Channels (10-14):
+        # Channel 10: Red (standardized)
+        # Channel 11: Green (standardized)
+        # Channel 12: Blue (standardized)
+        # Channel 13: NIR/Intensity (standardized)
+        # Channel 14: Depth (standardized)
         if data_loader["train"] is None:
             raise ValueError("No data for train")
         mean_training_losses = []
@@ -72,17 +95,23 @@ class OmnicanTrainer(BaseTrainer):
                     self.device), batch[1].to(self.device)
                 N, D, C, H, W = data.shape
                 data = data.view(N * D, C, H, W)
-                # print('data:', data.shape)
+                # print(f"labels shape: {labels.shape}")
+                # print(f"data shape: {data.shape}")
                 labels = labels.view(-1, 1)
-                # print('label:', labels.shape)
                 data = data[:(N * D) // self.base_len * self.base_len]
                 labels = labels[:(N * D) // self.base_len * self.base_len] # HR ground truth every fps
                 self.optimizer.zero_grad()
-                rgb = data[:, 1:2, :, :] 
-                depth = data[:, 3:4, :, :]
+                rgb = data[:, 5:8, :, :]  
+                depth = data[:, 9:10, :, :]
                 pred_ppg = self.model(rgb, depth)
-                # print(pred_ppg.shape)
-                # print(labels.shape)
+                # display the predicted ppg and label ppg
+                # plt.plot(pred_ppg.detach().cpu().numpy(), label='pred_ppg')
+                # plt.plot(labels.detach().cpu().numpy(), label='label_ppg')
+                # plt.legend()
+                # # plt.show()
+                # plt.savefig(f'pred_ppg_and_label_ppg_{idx}.png')
+                # plt.close()
+                # exit()
                 loss = self.criterion(pred_ppg, labels)
                 loss.backward()
 
@@ -93,8 +122,12 @@ class OmnicanTrainer(BaseTrainer):
                 self.scheduler.step()
                 running_loss += loss.item()
                 if idx % 100 == 99:  # print every 100 mini-batches
-                    print(
-                        f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
+                    print(f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
+                    plt.plot(pred_ppg.detach().cpu().numpy(), label='pred_ppg')
+                    plt.plot(labels.detach().cpu().numpy(), label='label_ppg')
+                    plt.legend()
+                    plt.savefig(f'pred_ppg_and_label_ppg_for_epoch_{epoch}_idx_{idx}.png')
+                    plt.close()
                     running_loss = 0.0
                 train_loss.append(loss.item())
                 tbar.set_postfix(loss=loss.item())
@@ -141,8 +174,8 @@ class OmnicanTrainer(BaseTrainer):
                 labels_valid = labels_valid.view(-1, 1)
                 data_valid = data_valid[:(N * D) // self.base_len * self.base_len]
                 labels_valid = labels_valid[:(N * D) // self.base_len * self.base_len]
-                rgb = data_valid[:, 1:2, :, :] 
-                depth = data_valid[:, 3:4, :, :]
+                rgb = data_valid[:, 5:8, :, :]  
+                depth = data_valid[:, 9:10, :, :]
                 pred_ppg_valid = self.model(rgb, depth)
                 loss = self.criterion(pred_ppg_valid, labels_valid)
                 valid_loss.append(loss.item())
@@ -193,8 +226,8 @@ class OmnicanTrainer(BaseTrainer):
                 labels_test = labels_test.view(-1, 1)
                 data_test = data_test[:(N * D) // self.base_len * self.base_len]
                 labels_test = labels_test[:(N * D) // self.base_len * self.base_len]
-                rgb = data_test[:, 1:2, :, :]
-                depth = data_test[:, 3:4, :, :]
+                rgb = data_test[:, 5:8, :, :]  
+                depth = data_test[:, 9:10, :, :]
                 pred_ppg_test = self.model(rgb, depth)
 
                 if self.config.TEST.OUTPUT_SAVE_DIR:

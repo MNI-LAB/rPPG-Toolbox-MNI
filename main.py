@@ -39,8 +39,6 @@ def seed_worker(worker_id):
 def custom_collate_fn(batch):
     """
     Custom collate function to handle variable-length sequences.
-    This function ensures all sequences are exactly 600 frames long.
-    Sequences longer than 600 are trimmed, shorter ones are padded.
     """
     # Separate data, labels, filenames, and chunk_ids
     data_list = []
@@ -54,41 +52,44 @@ def custom_collate_fn(batch):
         filename_list.append(filename)
         chunk_id_list.append(chunk_id)
     
-    # Set fixed length to 600
-    target_frames = 600
+    # Find the maximum dimensions for padding (but don't force 600 frames)
+    max_frames = max(data.shape[0] for data in data_list)
     max_height = max(data.shape[2] for data in data_list)
     max_width = max(data.shape[3] for data in data_list)
     channels = data_list[0].shape[1]  # Should be the same for all
-    # print(f"target_frames: {target_frames}, max_height: {max_height}, max_width: {max_width}, channels: {channels}")
     
-    # Process data tensors - trim or pad to exactly 600 frames
+    # print(f"DEBUG: max_frames: {max_frames}, max_height: {max_height}, max_width: {max_width}, channels: {channels}")
+    
+    # Process data tensors - pad to max_frames (not 600)
     processed_data_list = []
     for data in data_list:
         # Convert numpy dtype to torch dtype
         torch_dtype = torch.float32 if data.dtype == np.float32 else torch.float64
-        processed_data = torch.zeros(target_frames, channels, max_height, max_width, dtype=torch_dtype)
+        processed_data = torch.zeros(max_frames, channels, max_height, max_width, dtype=torch_dtype)
         
-        # Trim or copy data based on length
-        actual_frames = min(data.shape[0], target_frames)
-        processed_data[:actual_frames, :, :data.shape[2], :data.shape[3]] = torch.from_numpy(data[:actual_frames])
+        # Copy data (should already be the right length from chunking)
+        actual_frames = data.shape[0]
+        processed_data[:actual_frames, :, :data.shape[2], :data.shape[3]] = torch.from_numpy(data)
         processed_data_list.append(processed_data)
     
     # Stack the processed tensors
     data_batch = torch.stack(processed_data_list, dim=0)
     
-    # Process labels - trim or pad to exactly 600 length
+    # Process labels - pad to max_frames (not 600)
     processed_label_list = []
     for label in label_list:
         # Convert numpy dtype to torch dtype
         torch_dtype = torch.float32 if label.dtype == np.float32 else torch.float64
-        processed_label = torch.zeros(target_frames, dtype=torch_dtype)
+        processed_label = torch.zeros(max_frames, dtype=torch_dtype)
         
-        # Trim or copy label data based on length
-        actual_length = min(label.shape[0], target_frames)
-        processed_label[:actual_length] = torch.from_numpy(label[:actual_length])
+        # Copy label data (should already be the right length from chunking)
+        actual_length = label.shape[0]
+        processed_label[:actual_length] = torch.from_numpy(label)
         processed_label_list.append(processed_label)
     
     label_batch = torch.stack(processed_label_list, dim=0)
+    
+    # print(f"DEBUG: Final batch shapes - data: {data_batch.shape}, labels: {label_batch.shape}")
     
     return data_batch, label_batch, filename_list, chunk_id_list
 
@@ -253,9 +254,11 @@ if __name__ == "__main__":
             train_loader = data_loader.MRNIRPLoader.MRNIRPLoader
         elif config.TRAIN.DATA.DATASET == "iPadData": # iPad dataset added
             train_loader = data_loader.iPadDataLoader.iPadDataLoader
+        elif config.TRAIN.DATA.DATASET == "tofData": # tof dataset added
+            train_loader = data_loader.tofDataLoader.tofDataLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
-                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS and iBVP.")
+                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS, iBVP, iPadData, and tofData.")
 
         # Create and initialize the train dataloader given the correct toolbox mode,
         # a supported dataset name, and a valid dataset paths
@@ -301,11 +304,13 @@ if __name__ == "__main__":
             valid_loader = data_loader.MRNIRPLoader.MRNIRPLoader
         elif config.VALID.DATA.DATASET == "iPadData": # iPad dataset added
             valid_loader = data_loader.iPadDataLoader.iPadDataLoader
+        elif config.VALID.DATA.DATASET == "tofData": # tof dataset added
+            valid_loader = data_loader.tofDataLoader.tofDataLoader
         elif config.VALID.DATA.DATASET is None and not config.TEST.USE_LAST_EPOCH:
             raise ValueError("Validation dataset not specified despite USE_LAST_EPOCH set to False!")
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
-                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS and iBVP")
+                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS, iBVP, iPadData, and tofData")
         
         # Create and initialize the valid dataloader given the correct toolbox mode,
         # a supported dataset name, and a valid dataset path
@@ -351,9 +356,11 @@ if __name__ == "__main__":
             test_loader = data_loader.MRNIRPLoader.MRNIRPLoader
         elif config.TEST.DATA.DATASET == "iPadData": # iPad dataset added
             test_loader = data_loader.iPadDataLoader.iPadDataLoader
+        elif config.TEST.DATA.DATASET == "tofData": # tof dataset added
+            test_loader = data_loader.tofDataLoader.tofDataLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
-                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS and iBVP.")
+                             SCAMPS, BP4D+ (Normal and BigSmall preprocessing), UBFC-PHYS, iBVP, iPadData, and tofData.")
         
         if config.TOOLBOX_MODE == "train_and_test" and config.TEST.USE_LAST_EPOCH:
             print("Testing uses last epoch, validation dataset is not required.", end='\n\n')   
@@ -398,9 +405,11 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.iPadDataLoader.iPadDataLoader
         elif config.UNSUPERVISED.DATA.DATASET == "iPadData_CVSM":
             unsupervised_loader = data_loader.CVSMLoader.CVSMLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "tofData": # tof dataset added
+            unsupervised_loader = data_loader.tofDataLoader.tofDataLoader
         else:
             raise ValueError("Unsupervised dataset not supported! Currently supporting UBFC-rPPG, PURE, MMPD, \
-                             SCAMPS, BP4D+, UBFC-PHYS, iBVP, and iPadData.")
+                             SCAMPS, BP4D+, UBFC-PHYS, iBVP, iPadData, and tofData.")
         
         unsupervised_data = unsupervised_loader(
             name="unsupervised",

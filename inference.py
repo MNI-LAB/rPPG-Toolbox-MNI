@@ -16,23 +16,28 @@ from dataset.data_loader.BaseLoader import BaseLoader
 def face_crop(frame):
     detector = cv2.CascadeClassifier(
         './dataset/haarcascade_frontalface_default.xml')
-
+    
     # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
     # (x,y) corresponds to the top-left corner of the zone to define using
     # the computed width and height.
-    face_zone = detector.detectMultiScale(frame[:, :, :3].astype(np.uint8))
-
+    face_zone = detector.detectMultiScale(frame)
     if len(face_zone) < 1:
-        print("ERROR: No Face Detected")
+        # print("ERROR: No Face Detected")
         face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
     elif len(face_zone) >= 2:
         # Find the index of the largest face zone
         # The face zones are boxes, so the width and height are the same
         max_width_index = np.argmax(face_zone[:, 2])  # Index of maximum width
         face_box_coor = face_zone[max_width_index]
-        print("Warning: More than one faces are detected. Only cropping the biggest one.")
+        # print("Warning: More than one faces are detected. Only cropping the biggest one.")
     else:
         face_box_coor = face_zone[0]   
+        # print("Face Detected")
+    larger_box_coef = 1.5
+    face_box_coor[0] = max(0, face_box_coor[0] - (larger_box_coef - 1.0) / 2 * face_box_coor[2])
+    face_box_coor[1] = max(0, face_box_coor[1] - (larger_box_coef - 1.0) / 2 * face_box_coor[3])
+    face_box_coor[2] = larger_box_coef * face_box_coor[2]
+    face_box_coor[3] = larger_box_coef * face_box_coor[3]
     return face_box_coor
 
 def _list_clip_dirs(root_dir: str, max_clips: int = 10) -> List[str]:
@@ -44,7 +49,6 @@ def _read_rgbd_frames(clip_dir: str, display_frames: bool = True) -> Tuple[np.nd
     intensity_paths = sorted(glob.glob(os.path.join(clip_dir, 'Intensity', '*.png')))
     depth_paths = sorted(glob.glob(os.path.join(clip_dir, 'Depth', '*.png')))
     num_frames = min(len(intensity_paths), len(depth_paths))
-    print(f"Found {num_frames} frames in {clip_dir}")
     if num_frames == 0:
         return np.empty((0,)), np.empty((0,))
 
@@ -53,7 +57,6 @@ def _read_rgbd_frames(clip_dir: str, display_frames: bool = True) -> Tuple[np.nd
     
     # Display every 10th frame or first few frames
     display_indices = list(range(0, min(10, num_frames), max(1, num_frames // 10)))
-    
     for i in range(num_frames):
         intensity = cv2.imread(intensity_paths[i], cv2.IMREAD_COLOR)
         depth = cv2.imread(depth_paths[i], cv2.IMREAD_UNCHANGED)
@@ -63,19 +66,19 @@ def _read_rgbd_frames(clip_dir: str, display_frames: bool = True) -> Tuple[np.nd
             depth = depth[:, :, :1]
         intensity = intensity[:, :, 1:2]
         
+        if intensity.shape[:2] != depth.shape[:2]:
+            intensity = cv2.resize(intensity, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_LINEAR)
         # Face cropping
         face_region = face_crop(intensity)
+
         intensity = intensity[max(face_region[1], 0):min(face_region[1] + face_region[3], intensity.shape[0]),
                     max(face_region[0], 0):min(face_region[0] + face_region[2], intensity.shape[1])]
         depth = depth[max(face_region[1], 0):min(face_region[1] + face_region[3], depth.shape[0]),
                 max(face_region[0], 0):min(face_region[0] + face_region[2], depth.shape[1])]
-        
         # Resize intensity to match depth spatial size if needed
-        if intensity.shape[:2] != depth.shape[:2]:
-            intensity = cv2.resize(intensity, (depth.shape[1], depth.shape[0]))
+
         intensity_list.append(intensity)
         depth_list.append(depth)
-        
         # Display frames
         if display_frames and i in display_indices:
             # Convert intensity to displayable format (0-255)

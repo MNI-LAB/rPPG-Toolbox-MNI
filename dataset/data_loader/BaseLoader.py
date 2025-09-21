@@ -66,10 +66,10 @@ class BaseLoader(Dataset):
         self.do_preprocess = config_data.DO_PREPROCESS
         self.config_data = config_data
 
-        if self.do_preprocess:
-            from dataset.data_loader.face_detector.YOLO5Face import YOLO5Face
-            if 'Y5F' in self.config_data.PREPROCESS.CROP_FACE.BACKEND:
-                self.Y5FObj = YOLO5Face(self.config_data.PREPROCESS.CROP_FACE.BACKEND, device)
+        # if self.do_preprocess:
+            # from dataset.data_loader.face_detector.YOLO5Face import YOLO5Face
+            # if 'Y5F' in self.config_data.PREPROCESS.CROP_FACE.BACKEND:
+            #     self.Y5FObj = YOLO5Face(self.config_data.PREPROCESS.CROP_FACE.BACKEND, device)
 
         assert (config_data.BEGIN < config_data.END)
         assert (config_data.BEGIN > 0 or config_data.BEGIN == 0)
@@ -218,7 +218,6 @@ class BaseLoader(Dataset):
             end(float): index of ending during train/val split.
         """
         data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset 
-        # send data directories to be processed
         file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess) 
         self.build_file_list(file_list_dict)  # build file list
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
@@ -481,7 +480,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=15):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -496,6 +495,14 @@ class BaseLoader(Dataset):
         file_num = len(data_dirs)
         choose_range = range(0, file_num)
         pbar = tqdm(list(choose_range))
+
+        do_multi_process = True
+        if not do_multi_process:
+            file_list_dict = {}
+            for i in choose_range:
+                self.preprocess_dataset_subprocess(data_dirs, config_preprocess, i, file_list_dict)
+                pbar.update(1)
+            return file_list_dict
 
         # shared data resource
         manager = mp.Manager()  # multi-process manager
@@ -547,7 +554,8 @@ class BaseLoader(Dataset):
             file_list = file_list + file_paths
 
         if not file_list:
-            raise ValueError(self.dataset_name, 'No files in file list')
+            print(f'File list dict: {file_list_dict.items()}')
+            raise ValueError(self.dataset_name, 'No files in file directory\n', file_list_dict.items())
 
         file_list_df = pd.DataFrame(file_list, columns=['input_files'])
         os.makedirs(os.path.dirname(self.file_list_path), exist_ok=True)

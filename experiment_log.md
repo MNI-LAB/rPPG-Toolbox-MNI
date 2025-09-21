@@ -24,3 +24,6 @@ FFT Percentage Accuracy (within 10%): 93.5% (58/62 measurements) +/- 6.5%
 - MY_FFT HR calculation
 - Bandpass filter
 - log folder path: /nfs/turbo/coe-mni/toolbox_runs/omnican_gd_tvt_exp_do_chunk
+## OMNICAN September 21, 2025
+- Chunks of 200, @20fps
+- Using Diff normalized NIR + Depth channels
