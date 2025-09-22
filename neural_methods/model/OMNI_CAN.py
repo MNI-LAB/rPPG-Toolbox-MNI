@@ -138,17 +138,36 @@ class OMNICAN(nn.Module):
             raise Exception('Unsupported image size')
         self.final_dense_2 = nn.Linear(self.nb_dense, 1, bias=True)
 
-    def forward(self, rgb, depth, params=None):
+    def forward(self, intensities, params=None):
+        """
+        Forward pass for OMNICAN.
+
+        Args:
+            rgb (torch.Tensor): Diff normalized intensity tensor
+            depth (torch.Tensor): Depth image tensor of shape (batch_size, 1, height, width)
+            params (dict, optional): Additional parameters. Defaults to None.
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, 1)
+        """
+        # residual_depth = self.RCNN(depth)
+        # rgb_comp = rgb - residual_depth
+        rgb_raw = intensities[:, :3, :, :]
+        nir_raw = intensities[:, 3:4, :, :]
+        depth_raw = intensities[:, 4:5, :, :]
+        rgb_norm = intensities[:, 5:8, :, :]
+        nir_norm = intensities[:, 8:9, :, :]
+        depth_norm = intensities[:, 9:10, :, :]
+        rgb_std = intensities[:, 10:13, :, :]
+        nir_std = intensities[:, 13:14, :, :]
+        depth_std = intensities[:, 14:15, :, :]
         
-        residual_depth = self.RCNN(depth)
-        rgb_comp = rgb - residual_depth
-        
-        diff_input = self.TSM_1(rgb_comp)
+        diff_input = self.TSM_1(rgb_norm)
         d1 = torch.tanh(self.motion_conv1(diff_input))
         d1 = self.TSM_2(d1)
         d2 = torch.tanh(self.motion_conv2(d1))
 
-        r1 = torch.tanh(self.apperance_conv1(rgb))
+        r1 = torch.tanh(self.apperance_conv1(rgb_raw))
         r2 = torch.tanh(self.apperance_conv2(r1))
 
         g1 = torch.sigmoid(self.apperance_att_conv1(r2))

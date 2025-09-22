@@ -101,9 +101,7 @@ class OmnicanTrainer(BaseTrainer):
                 data = data[:(N * D) // self.base_len * self.base_len]
                 labels = labels[:(N * D) // self.base_len * self.base_len] # HR ground truth every fps
                 self.optimizer.zero_grad()
-                rgb = data[:, 5:8, :, :]  
-                depth = data[:, 9:10, :, :]
-                pred_ppg = self.model(rgb, depth)
+                pred_ppg = self.model(data)
                 # display the predicted ppg and label ppg
                 # plt.plot(pred_ppg.detach().cpu().numpy(), label='pred_ppg')
                 # plt.plot(labels.detach().cpu().numpy(), label='label_ppg')
@@ -174,9 +172,7 @@ class OmnicanTrainer(BaseTrainer):
                 labels_valid = labels_valid.view(-1, 1)
                 data_valid = data_valid[:(N * D) // self.base_len * self.base_len]
                 labels_valid = labels_valid[:(N * D) // self.base_len * self.base_len]
-                rgb = data_valid[:, 5:8, :, :]  
-                depth = data_valid[:, 9:10, :, :]
-                pred_ppg_valid = self.model(rgb, depth)
+                pred_ppg_valid = self.model(data_valid)
                 loss = self.criterion(pred_ppg_valid, labels_valid)
                 valid_loss.append(loss.item())
                 valid_step += 1
@@ -226,9 +222,7 @@ class OmnicanTrainer(BaseTrainer):
                 labels_test = labels_test.view(-1, 1)
                 data_test = data_test[:(N * D) // self.base_len * self.base_len]
                 labels_test = labels_test[:(N * D) // self.base_len * self.base_len]
-                rgb = data_test[:, 5:8, :, :]  
-                depth = data_test[:, 9:10, :, :]
-                pred_ppg_test = self.model(rgb, depth)
+                pred_ppg_test = self.model(data_test)
 
                 if self.config.TEST.OUTPUT_SAVE_DIR:
                     labels_test = labels_test.cpu()
