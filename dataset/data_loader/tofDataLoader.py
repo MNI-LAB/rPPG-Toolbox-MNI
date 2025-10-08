@@ -107,33 +107,33 @@ class tofDataLoader(BaseLoader):
         
         return data_dirs_new
     
-    def load_rgb_depth_pair(self, rgb_path, depth_path):
-        """
-        Loads RGB and Depth images, then stacks them into a 4D array.
-        """
-        rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)  # Shape: (H, W, 3)
-        depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)  # Shape: (H, W)
+    # def load_rgb_depth_pair(self, rgb_path, depth_path):
+    #     """
+    #     Loads RGB and Depth images, then stacks them into a 4D array.
+    #     """
+    #     rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)  # Shape: (H, W, 3)
+    #     depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)  # Shape: (H, W)
 
-        if rgb is None or depth is None:
-            print(f"Failed to load {rgb_path} or {depth_path}")
-            return None
+    #     if rgb is None or depth is None:
+    #         print(f"Failed to load {rgb_path} or {depth_path}")
+    #         return None
 
-        # resize both to 480 width, 640 height if not already
-        if rgb.shape[0] != 640 or rgb.shape[1] != 480:
-            rgb = cv2.resize(rgb, (480, 640))
-        if depth.shape[0] != 640 or depth.shape[1] != 480:
-            depth = cv2.resize(depth, (480, 640))   
+    #     # resize both to 480 width, 640 height if not already
+    #     if rgb.shape[0] != 640 or rgb.shape[1] != 480:
+    #         rgb = cv2.resize(rgb, (480, 640))
+    #     if depth.shape[0] != 640 or depth.shape[1] != 480:
+    #         depth = cv2.resize(depth, (480, 640))   
         
-        # Normalize depth to 0-255 range
-        depth = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    #     # Normalize depth to 0-255 range
+    #     depth = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         
-        # Expand Depth to 1 channel
-        depth = np.expand_dims(depth, axis=2)  # Shape: (H, W, 1)
-        # Stack RGB and Depth channels -> (H, W, 4)
-        rgbd = np.concatenate((rgb, depth), axis=2)  # Shape: (H, W, 4)
+    #     # Expand Depth to 1 channel
+    #     depth = np.expand_dims(depth, axis=2)  # Shape: (H, W, 1)
+    #     # Stack RGB and Depth channels -> (H, W, 4)
+    #     rgbd = np.concatenate((rgb, depth), axis=2)  # Shape: (H, W, 4)
 
         
-        return rgbd
+    #     return rgbd
     def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
         """ Invoked by preprocess_dataset for multi_process. """
         filename = os.path.split(data_dirs[i]['path'])[-1]
@@ -233,12 +233,18 @@ class tofDataLoader(BaseLoader):
         # print(num_frames)
         # pbar = tqdm(range(num_frames), desc='Reading frames')
         for i in range(num_frames):
-            img = cv2.imread(all_png[i])
-            depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
-            nir = cv2.imread(all_nir[i], cv2.IMREAD_COLOR)
+            img = cv2.imread(all_png[i], cv2.IMREAD_COLOR)
+            depth = cv2.imread(all_depth[i], cv2.IMREAD_GRAYSCALE)
+            nir = cv2.imread(all_nir[i], cv2.IMREAD_GRAYSCALE)
+            
+            # check if all nir channels are the same
+            if nir[:, :, 0] == nir[:, :, 1] and nir[:, :, 0] == nir[:, :, 2]:
+                pass
+            else:
+                print(f'warning: nir image has different channels!')
             nir = nir[:, :, :1]
             depth = depth[:, :, :1]
-            img = img[:, :, ::-1]
+            img = img[:, :, ::-1] # BGR to RGB
             img = tofDataLoader.center_crop(img, depth.shape[1], depth.shape[0])
             img = cv2.resize(img, (depth.shape[1], depth.shape[0]))
             rgbd = np.concatenate((img, nir, depth), axis=2)
