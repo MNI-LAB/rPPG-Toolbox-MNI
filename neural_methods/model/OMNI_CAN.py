@@ -59,7 +59,7 @@ class TSM(nn.Module):
 
 class OMNICAN(nn.Module):
 
-    def __init__(self, in_channels=1, depth_channels=1, nb_filters1=32, nb_filters2=64, kernel_size=3, dropout_rate1=0.25,
+    def __init__(self, in_channels=3, depth_channels=1, nb_filters1=32, nb_filters2=64, kernel_size=3, dropout_rate1=0.25,
                  dropout_rate2=0.5, pool_size=(2, 2), nb_dense=128, frame_depth=20, img_size=36):
         """Definition of OMNICAN.
         Args:
@@ -132,8 +132,11 @@ class OMNICAN(nn.Module):
             self.final_dense_1 = nn.Linear(30976, self.nb_dense, bias=True)
         elif img_size == 128:
             self.final_dense_1 = nn.Linear(57600, self.nb_dense, bias=True)
+        elif img_size == 256:
+            self.final_dense_1 = nn.Linear(246016, self.nb_dense, bias=True)
         elif img_size == 480:
-            self.final_dense_1 = nn.Linear(157600, self.nb_dense, bias=True)
+            # lazy linear takes care of the input feature dimension
+            self.final_dense_1 = nn.LazyLinear(self.nb_dense, bias=True)
         else:
             raise Exception('Unsupported image size')
         self.final_dense_2 = nn.Linear(self.nb_dense, 1, bias=True)
@@ -152,22 +155,22 @@ class OMNICAN(nn.Module):
         """
         # residual_depth = self.RCNN(depth)
         # rgb_comp = rgb - residual_depth
-        rgb_raw = intensities[:, :3, :, :]
-        nir_raw = intensities[:, 3:4, :, :]
-        depth_raw = intensities[:, 4:5, :, :]
-        rgb_norm = intensities[:, 5:8, :, :]
-        nir_norm = intensities[:, 8:9, :, :]
-        depth_norm = intensities[:, 9:10, :, :]
-        rgb_std = intensities[:, 10:13, :, :]
-        nir_std = intensities[:, 13:14, :, :]
-        depth_std = intensities[:, 14:15, :, :]
+        rgb_norm = intensities[:, 0:3, :, :]
+        nir_norm = intensities[:, 3:4, :, :]
+        depth_norm = intensities[:, 4:5, :, :]
+        rgb_std = intensities[:, 5:8, :, :]
+        nir_std = intensities[:, 8:9, :, :]
+        depth_std = intensities[:, 9:10, :, :]
+        rgb_raw = intensities[:, 10:13, :, :]
+        nir_raw = intensities[:, 13:14, :, :]
+        depth_raw = intensities[:, 14:15, :, :]
         
         diff_input = self.TSM_1(rgb_norm)
         d1 = torch.tanh(self.motion_conv1(diff_input))
         d1 = self.TSM_2(d1)
         d2 = torch.tanh(self.motion_conv2(d1))
 
-        r1 = torch.tanh(self.apperance_conv1(rgb_raw))
+        r1 = torch.tanh(self.apperance_conv1(rgb_std))
         r2 = torch.tanh(self.apperance_conv2(r1))
 
         g1 = torch.sigmoid(self.apperance_att_conv1(r2))

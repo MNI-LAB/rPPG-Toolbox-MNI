@@ -3,6 +3,10 @@
 import argparse
 import random
 import time
+import os
+
+# Suppress TensorRT warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress INFO and WARNING messages from TensorFlow
 
 import numpy as np
 import torch
@@ -12,6 +16,8 @@ from neural_methods import trainer
 from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from classical_methods.CVSMTest import CVSMTrainer
 from torch.utils.data import DataLoader
+# Disable could not find tensorRT warning
+
 
 RANDOM_SEED = 100
 torch.manual_seed(RANDOM_SEED)

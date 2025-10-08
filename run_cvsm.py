@@ -21,7 +21,7 @@ The CVSM method is now located at:
 Original standalone implementation preserved below for reference:
 ===============================================================================
 """
-
+import re
 import os
 import argparse
 from config import get_config
@@ -55,7 +55,7 @@ def seed_worker(worker_id):
 
 def add_args(parser):
     """Adds arguments for parser."""
-    CONFIG_FILE = "configs/infer_configs/iPadData_CVSM_GREATLAKES.yaml"
+    CONFIG_FILE = 'configs/Linux_train_configs/tof_CVSM_UNSUPERVISED.yaml'
     parser.add_argument('--config_file', required=False,
                         default=CONFIG_FILE, type=str, help="The name of the model.")
     '''Neural Method Sample YAML LIST:
@@ -110,38 +110,17 @@ def get_bounding_box(roi_name: str, landmarks_pixels: np.ndarray) -> np.ndarray:
 # Removed interval_process function - will use standard toolbox evaluation windowing instead
 
 # --- Data Loading Functions ---
+def _numerical_sort(paths):
+    """Sort file paths by the leading integer in the filename (e.g. '12.png' -> 12)."""
+    def key(p):
+        name = os.path.splitext(os.path.basename(p))[0]
+        try:
+            return int(name)
+        except ValueError:
+            m = re.search(r'(\d+)', name)
+            return int(m.group(1)) if m else name
+    return sorted(paths, key=key)
 
-def read_video(video_file: str) -> np.ndarray:
-    """Reads a rgb video and depth video, returns combined frames (T, H, W, 4)"""
-    frames = list()
-    all_png = sorted(glob.glob(os.path.join(video_file, "video", '*.png')))
-    all_depth = sorted(glob.glob(os.path.join(video_file, "depth", '*.png')))
-    
-    num_frames = min(len(all_png), len(all_depth))
-    if num_frames == 0:
-        print(f"Warning: No video or depth frames found in {video_file}")
-        return np.asarray([])
-
-    i = 0
-    for i in tqdm(range(num_frames), desc=f"Loading frames from {os.path.basename(video_file)}"):
-        img = cv2.imread(all_png[i])
-        depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
-        
-        if img is None or depth is None:
-            i += 1
-            continue
-
-        if depth.ndim > 2:
-            depth = depth[:, :, 0]
-
-        img = cv2.resize(img, (depth.shape[1], depth.shape[0]))
-        
-        depth = depth.reshape(depth.shape[0], depth.shape[1], 1)
-        
-        rgbd = np.concatenate((img, depth), axis=2)
-        frames.append(rgbd)
-        i += 1
-    return np.asarray(frames)
 
 def read_wave(bvp_file: str) -> np.ndarray:
     with open(bvp_file, "r") as f:
@@ -409,9 +388,10 @@ class FaceProcessing:
         depth_signal = []
         
         # Get file lists
-        all_png = sorted(glob.glob(os.path.join(video_path, "video", '*.png')))
-        all_depth = sorted(glob.glob(os.path.join(video_path, "depth", '*.png')))
-        
+        all_png = sorted(glob.glob(os.path.join(video_path, "Intensity", '*.png')))
+        all_depth = sorted(glob.glob(os.path.join(video_path, "Depth", '*.png')))
+        all_png = _numerical_sort(glob.glob(os.path.join(video_path, "Intensity", '*.png')))
+        all_depth = _numerical_sort(glob.glob(os.path.join(video_path, "Depth", '*.png')))    
         num_frames = min(len(all_png), len(all_depth))
         if num_frames == 0:
             print(f"Warning: No video or depth frames found in {video_path}")
@@ -419,8 +399,8 @@ class FaceProcessing:
         
         # print(f"Processing {num_frames} frames from {os.path.basename(video_path)}...")
 
-        # for i in tqdm(range(num_frames), desc="Processing frames"):
-        for i in range(num_frames):
+        for i in tqdm(range(num_frames), desc="Processing frames"):
+        # for i in range(num_frames):
             # Load images directly from disk
             img = cv2.imread(all_png[i])
             depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
@@ -464,71 +444,96 @@ class FaceProcessing:
         compensated_ppg_signal = self.Depth_compensation(ppg_signal_g, depth_signal, time_window_sec, self.fps)
         
         return compensated_ppg_signal
-    
-    
-# Removed debug_chunks function - no longer needed with standard evaluation
+        
+    def find_HR(self, intensity, config, name, fps, video_index=None):
+        """
+        Calculate heart rate using MY_FFT method (based on original CVSM approach).
+        This method uses simple FFT without zero-padding and generates diagnostic plots.
+        
+        Args:
+            intensity: PPG signal
+            config: Configuration object
+            name: Name for saving plots ('pred' or 'label')
+            fps: Sampling frequency
+            video_index: Unique identifier for the video/clip (to avoid overwriting plots)
+            
+        Returns:
+            HR: Estimated heart rate in BPM
+        """
+        # Perform FFT analysis
+        Intensity_freq = np.fft.rfft(intensity)
+        X_final = np.abs(Intensity_freq)
 
-# --- Main Script Execution ---
+        # Create frequency axis in BPM
+        freq = np.fft.rfftfreq(len(intensity), 1.0 / fps) * 60.0
+        
+        # Filter to physiological heart rate range
+        mask = (freq >= 50) & (freq <= 150)
+        freq_filtered = freq[mask]
+        hr_arr = X_final[mask]
+        
+        # Find peak frequency
+        if len(hr_arr) > 0:
+            HR = freq_filtered[np.argmax(hr_arr)]
+        else:
+            print(f"Warning: No valid frequencies found in range 50-150 BPM for {name}")
+            HR = 75.0  # Default fallback
+        
+        # Generate diagnostic plots
+        try:
+            # Create unique filename using video_index
+            if video_index is not None:
+                # Clean the video_index for use in filename (remove special characters)
+                clean_index = str(video_index).replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+                file_prefix = f"{name}_{clean_index}"
+            else:
+                file_prefix = name
+            
+            # HR frequency spectrum plot
+            file_name = f'{file_prefix}_HR_diagram.pdf'
+            save_path = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'HR_diagram', name)
+            os.makedirs(save_path, exist_ok=True)
+            
+            plt.figure(figsize=(10, 6))
+            plt.plot(freq_filtered, hr_arr, 'b-', linewidth=2)
+            plt.axvline(HR, color='red', linestyle='--', linewidth=2, 
+                    label=f'Peak: {HR:.1f} BPM')
+            plt.xlabel('Frequency (BPM)')
+            plt.ylabel('FFT Magnitude')
+            title_text = f'HR Frequency Spectrum - {name.upper()}'
+            if video_index is not None:
+                title_text += f' (Video: {video_index})'
+            plt.title(title_text)
+            plt.grid(True, alpha=0.3)
+            plt.legend()
+            plt.xlim(50, 150)
+            plt.savefig(os.path.join(save_path, file_name), bbox_inches='tight', dpi=300)
+            plt.close()
+            
+            # Time domain waveform plot
+            save_path = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'waveform', name)
+            os.makedirs(save_path, exist_ok=True)
+            file_name = f'{file_prefix}_waveform.pdf'
+            
+            time_axis = np.arange(len(intensity)) / fps
+            plt.figure(figsize=(12, 6))
+            plt.plot(time_axis, intensity, 'b-', linewidth=1, alpha=0.8)
+            plt.xlabel('Time (seconds)')
+            plt.ylabel('PPG Amplitude')
+            title_text = f'PPG Waveform - {name.upper()} (Estimated HR: {HR:.1f} BPM)'
+            if video_index is not None:
+                title_text += f' - Video: {video_index}'
+            plt.title(title_text)
+            plt.grid(True, alpha=0.3)
+            plt.savefig(os.path.join(save_path, file_name), bbox_inches='tight', dpi=300)
+            plt.close()
+            
+        except Exception as e:
+            print(f"Warning: Could not save diagnostic plots for {name}: {e}")
+
+        return HR
 
 if __name__ == "__main__":
-    # class Config:
-    #     def __init__(self):
-    #         self.BASE = ['']
-    #         self.TOOLBOX_MODE = "only_test"
-    #         self.TEST = type('TEST', (), {
-    #             'METRICS': ['MAE', 'RMSE', 'MAPE', 'Pearson', 'SNR', 'BA'],  # All metrics from YAML
-    #             'USE_LAST_EPOCH': False,
-    #             'DATA': type('DATA', (), {
-    #                 'FS': 30,
-    #                 'DATASET': "iPadData",
-    #                 'DO_PREPROCESS': True,
-    #                 'DATA_FORMAT': "NDCHW",
-    #                 'DATA_PATH': "/nfs/turbo/coe-mni/iPadData/training",
-    #                 'CACHED_PATH': "/nfs/turbo/coe-mni/iPadData_preprocess",
-    #                 'EXP_DATA_NAME': "",
-    #                 'BEGIN': 0.8,
-    #                 'END': 1.0,
-    #                 'PREPROCESS': type('PREPROCESS', (), {
-    #                     'DATA_TYPE': [ 'DiffNormalized','Standardized' ],
-    #                     'LABEL_TYPE': "Raw",  # <-- Adjusted to match your raw data
-    #                     'DO_CHUNK': True,
-    #                     'CHUNK_LENGTH': 180,  # <-- Adjusted to match YAML
-    #                     'CROP_FACE': type('CROP_FACE', (), {
-    #                         'DO_CROP_FACE': True,
-    #                         'BACKEND': 'HC',
-    #                         'USE_LARGE_FACE_BOX': True,
-    #                         'LARGE_BOX_COEF': 1.5,
-    #                         'DETECTION': type('DETECTION', (), {
-    #                             'DO_DYNAMIC_DETECTION': False,
-    #                             'DYNAMIC_DETECTION_FREQUENCY': 30,
-    #                             'USE_MEDIAN_FACE_BOX': False,
-    #                         })
-    #                     }),
-    #                     'RESIZE': type('RESIZE', (), {
-    #                         'H': 560,
-    #                         'W': 560
-    #                     })
-    #                 })
-    #             })
-    #         })
-    #         self.DEVICE = "cpu"  # Assuming you're running on CPU for classical methods
-    #         self.NUM_OF_GPU_TRAIN = 1
-    #         self.LOG = type('LOG', (), {
-    #             'PATH': "/nfs/turbo/coe-mni/toolbox_runs/ipad_cvsm_exp"
-    #         })
-    #         self.MODEL = type('MODEL', (), {
-    #             'DROP_RATE': 0.2,
-    #             'NAME': "CVSM",
-    #         })
-    #         self.INFERENCE = type('INFERENCE', (), {
-    #             'BATCH_SIZE': 4,
-    #             'EVALUATION_METHOD': "FFT",
-    #             'MODEL_PATH': "cvsm_classical_pipeline",
-    #             'EVALUATION_WINDOW': type('EVALUATION_WINDOW', (), {
-    #                 'USE_SMALLER_WINDOW': False,
-    #                 'WINDOW_SIZE': 30
-    #             })
-    #         })
 
     # parse arguments.
     parser = argparse.ArgumentParser()
@@ -539,17 +544,24 @@ if __name__ == "__main__":
     config = get_config(args)
     print('Configuration:')
     print(config, end='\n\n')
-    fps = config.TEST.DATA.FS
+    fps = 20
     
-    # Ensure we're using evaluation windows like the standard toolbox
-    print(f"Using evaluation window size: {config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE} seconds")
-    print(f"Evaluation method: {config.INFERENCE.EVALUATION_METHOD}")
-    print(f"Label type: {config.TEST.DATA.PREPROCESS.LABEL_TYPE}")
+    # make output directory if not exist.
+    if not os.path.exists(config.LOG.PATH):
+        os.makedirs(config.LOG.PATH)
+    
+    # make a txt file to record output HRs and errors
+    output_txt_path = os.path.join(config.LOG.PATH, 'output_hr_errors.csv')
+    if not os.path.exists(output_txt_path):
+        with open(output_txt_path, 'w') as f:
+            f.write('Clip_Name, Predicted_HR, Ground_Truth_HR, Absolute_Error\n')
 
-    # Get the full list of data directories
-    # ipadDataLoader = iPadDataLoader(name="test", data_path=config.TEST.DATA.DATA_PATH, config_data=config.TEST.DATA, device=config.DEVICE)
     
-    full_data_path = "/nfs/turbo/coe-mni/iPadData/test"
+    full_data_path = "/mnt/d/GithubRepos/data-collector/Data/Train_Split/Train"
+    if full_data_path == config.UNSUPERVISED.DATA.DATAPATH:
+        pass
+    else:
+        print(f"Warning: The hardcoded data path {full_data_path} does not match the config path {config.UNSUPERVISED.DATA.DATAPATH}. Using hardcoded path.")
     all_dirs_with_index = []
     for i, dir_name in enumerate(sorted(os.listdir(full_data_path))):
         full_path = os.path.join(full_data_path, dir_name)
@@ -560,7 +572,7 @@ if __name__ == "__main__":
     data_dir = [d['path'] for d in all_dirs_with_index]
     # data_dir = data_dir[:2]
     data_dir.sort()
-    print(f'All data directories found: {data_dir}')
+    print(f'Found {len(data_dir)} clips for evaluation.')
     all_predictions = {}
     all_labels = {}
     face_processor = FaceProcessing(fps=fps)
@@ -597,6 +609,23 @@ if __name__ == "__main__":
             
             all_predictions[subject_id] = pred_chunks
             all_labels[subject_id] = gt_chunks
+            
+            # Take the FFT of predicted HR and GT HR for logging
+            # savgol filter
+            pred_filtered = scipy.signal.savgol_filter(compensated_ppg_signal, 5, 2)
+            HR_pred = face_processor.find_HR(pred_filtered, config, name='pred', fps=fps, video_index=clip_name)
+            
+            gt_filtered = scipy.signal.savgol_filter(gt_bvp_wave, 5, 2)
+            HR_gt = face_processor.find_HR(gt_filtered, config, name='label', fps=fps, video_index=clip_name)
+            
+            # write to txt file
+            abs_error = abs(HR_pred - HR_gt)
+            percentage_error = (abs_error / HR_gt) * 100 if HR_gt != 0 else 0
+            print(f"{clip_name} - Predicted HR: {HR_pred:.2f} bpm, Ground Truth HR: {HR_gt:.2f} bpm, Absolute Error: {abs_error:.2f} bpm, Percentage Error: {percentage_error:.2f}%")
+            with open(output_txt_path, 'a') as f:
+                f.write(f'{clip_name}, {HR_pred:.2f}, {HR_gt:.2f}, {abs_error:.2f}\n')
+            
+            
         else:
             print(f"Warning: No valid signal detected for {clip_name}. Skipping...")
 

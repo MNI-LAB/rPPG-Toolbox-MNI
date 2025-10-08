@@ -116,8 +116,10 @@ class TSCAN(nn.Module):
         self.final_dense_2 = nn.Linear(self.nb_dense, 1, bias=True)
 
     def forward(self, inputs, params=None):
-        diff_input = inputs[:, :3, :, :]
-        raw_input = inputs[:, 3:, :, :]
+        # diff_input = inputs[:, :3, :, :]
+        # raw_input = inputs[:, 3:, :, :]
+        raw_input = inputs[:, 0:3, :, :]
+        diff_input = inputs[:, 5:8, :, :]
 
         diff_input = self.TSM_1(diff_input)
         d1 = torch.tanh(self.motion_conv1(diff_input))

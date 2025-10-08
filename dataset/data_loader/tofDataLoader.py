@@ -193,12 +193,41 @@ class tofDataLoader(BaseLoader):
         file_list_dict[i] = input_name_list
 
     @staticmethod
+    def center_crop(image, target_width, target_height):
+        h, w = image.shape[:2]
+        
+        # Calculate center crop to match target aspect ratio
+        target_aspect = target_width / target_height
+        current_aspect = w / h
+        
+        if current_aspect > target_aspect:
+            # Image is too wide, crop width
+            new_width = int(h * target_aspect)
+            start_x = (w - new_width) // 2
+            image = image[:, start_x:start_x + new_width]
+        elif current_aspect < target_aspect:
+            # Image is too tall, crop height
+            new_height = int(w / target_aspect)
+            start_y = (h - new_height) // 2
+            image = image[start_y:start_y + new_height, :]
+        return image
+
+    @staticmethod
     def read_video(video_file):
         """Reads a rgb video file, NIR video file, and depth video file, returns frames(T, H, W, 5) """
+        def _natural_sort_key(path: str) -> int:
+            """Extracts a numeric frame index from a filepath for natural sorting.
+
+            Falls back to 0 if no digits are found.
+            """
+            name = os.path.splitext(os.path.basename(path))[0]
+            m = re.search(r"\d+", name)
+            return int(m.group()) if m else 0
         frames = list()
-        all_png = sorted(glob.glob(video_file + "RGB/" + '*.png'))
-        all_depth = sorted(glob.glob(video_file + "Depth/" + '*.png'))
-        all_nir = sorted(glob.glob(video_file + "Intensity/" + '*.png'))
+        all_png = sorted(glob.glob(video_file + "RGB/" + '*.png'), key=_natural_sort_key)
+        all_depth = sorted(glob.glob(video_file + "Depth/" + '*.png'), key=_natural_sort_key)
+        all_nir = sorted(glob.glob(video_file + "Intensity/" + '*.png'), key=_natural_sort_key)
+        
         i = 0
         num_frames = min(len(all_png), len(all_depth), len(all_nir))
         # print(num_frames)
@@ -207,22 +236,11 @@ class tofDataLoader(BaseLoader):
             img = cv2.imread(all_png[i])
             depth = cv2.imread(all_depth[i], cv2.IMREAD_UNCHANGED)
             nir = cv2.imread(all_nir[i], cv2.IMREAD_COLOR)
-            if nir.ndim == 3:
-                nir = nir[:, :, :1]
-            if depth.ndim == 3:
-                depth = depth[:, :, :1]
-            depth = depth.reshape(depth.shape[0], depth.shape[1], 1)
-            
-            # resize RGB and NIR to depth's shape
-            if img.shape[:2] != depth.shape[:2]:
-                # crop image width from 1920 to 1436.4
-                margins = int((1920 - 1436.4) / 2)
-                img = img[:, margins:1920-margins, :]
-                img = cv2.resize(img, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_LINEAR)
-            if nir.shape[:2] != depth.shape[:2]:
-                nir = cv2.resize(nir, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_LINEAR)
-
-            # stack rgb and depth
+            nir = nir[:, :, :1]
+            depth = depth[:, :, :1]
+            img = img[:, :, ::-1]
+            img = tofDataLoader.center_crop(img, depth.shape[1], depth.shape[0])
+            img = cv2.resize(img, (depth.shape[1], depth.shape[0]))
             rgbd = np.concatenate((img, nir, depth), axis=2)
             frames.append(rgbd)
         return np.asarray(frames)

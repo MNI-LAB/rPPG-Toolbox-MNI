@@ -13,10 +13,10 @@ from neural_methods.model.OMNI_CAN import OMNICAN
 from neural_methods.trainer.BaseTrainer import BaseTrainer
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import cv2
 
 
 class OmnicanTrainer(BaseTrainer):
-
     def __init__(self, config, data_loader):
         """Inits parameters from args and the writer for TensorboardX."""
         super().__init__()
@@ -43,6 +43,8 @@ class OmnicanTrainer(BaseTrainer):
 
             self.num_train_batches = len(data_loader["train"])
             self.criterion = torch.nn.MSELoss()
+            # using Pearson loss
+            # self.criterion = Neg_Pearson()
             self.optimizer = optim.AdamW(
                 self.model.parameters(), lr=config.TRAIN.LR, weight_decay=0)
             # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
@@ -56,24 +58,18 @@ class OmnicanTrainer(BaseTrainer):
 
     def train(self, data_loader):
         """Training routine for model"""
-        # Original Channels (0-4):
-        # Channel 0: Red (raw)
-        # Channel 1: Green (raw)
-        # Channel 2: Blue (raw)
-        # Channel 3: NIR/Intensity (raw) ← This is what your model currently uses
-        # Channel 4: Depth (raw)
-        # DiffNormalized Channels (5-9):
-        # Channel 5: Red (diff normalized)
-        # Channel 6: Green (diff normalized) ← You might want this instead
-        # Channel 7: Blue (diff normalized)
-        # Channel 8: NIR/Intensity (diff normalized) ← You might want this instead
-        # Channel 9: Depth (diff normalized) ← You might want this instead
-        # Standardized Channels (10-14):
-        # Channel 10: Red (standardized)
-        # Channel 11: Green (standardized)
-        # Channel 12: Blue (standardized)
-        # Channel 13: NIR/Intensity (standardized)
-        # Channel 14: Depth (standardized)
+        # Raw Channels (0-4):
+        # Channel 0: Red (Raw)
+        # Channel 1: Green (Raw)
+        # Channel 2: Blue (Raw)
+        # Channel 3: NIR/Intensity (Raw)
+        # Channel 4: Depth (Raw)
+        # Standardized Channels (5-9):
+        # Channel 5: Red (standardized)
+        # Channel 6: Green (standardized)
+        # Channel 7: Blue (standardized)
+        # Channel 8: NIR/Intensity (standardized)
+        # Channel 9: Depth (standardized)
         if data_loader["train"] is None:
             raise ValueError("No data for train")
         mean_training_losses = []
@@ -87,7 +83,6 @@ class OmnicanTrainer(BaseTrainer):
             self.model.train()
             # Model Training
             tbar = tqdm(data_loader["train"], ncols=80)
-            # print(f"data loader:{data_loader['train']}")
             
             for idx, batch in enumerate(tbar):
                 tbar.set_description("Train epoch %s" % epoch)
@@ -95,13 +90,58 @@ class OmnicanTrainer(BaseTrainer):
                     self.device), batch[1].to(self.device)
                 N, D, C, H, W = data.shape
                 data = data.view(N * D, C, H, W)
-                # print(f"labels shape: {labels.shape}")
-                # print(f"data shape: {data.shape}")
                 labels = labels.view(-1, 1)
                 data = data[:(N * D) // self.base_len * self.base_len]
                 labels = labels[:(N * D) // self.base_len * self.base_len] # HR ground truth every fps
+                # print(f"labels shape: {labels.shape}")
+                # print(f"data shape: {data.shape}")
+                # write every frame of data as a image in debug folder
+                # if not os.path.exists('tof_debug'):
+                #     os.makedirs('tof_debug')
+                # if not os.path.exists('tof_debug/rgb_0_3'):
+                #     os.makedirs('tof_debug/rgb_0_3')
+                # if not os.path.exists('tof_debug/rgb_5_8'):
+                #     os.makedirs('tof_debug/rgb_5_8')
+                # if not os.path.exists('tof_debug/rgb_10_13'):
+                #     os.makedirs('tof_debug/rgb_10_13')
+                # for i in range(data.shape[0]):
+                #     cur = data[i]
+                #     rgb_raw = cur[0:3, :, :]
+                #     rgb_raw = rgb_raw.detach().cpu().numpy()
+                #     rgb_raw = np.transpose(rgb_raw, (1, 2, 0))
+                #     rgb_raw = (rgb_raw - rgb_raw.min()) / (rgb_raw.max() - rgb_raw.min())
+                #     rgb_raw = (rgb_raw * 255).astype(np.uint8)
+                #     rgb_raw = cv2.cvtColor(rgb_raw, cv2.COLOR_RGB2BGR)
+                #     cv2.imwrite(f'tof_debug/rgb_0_3/rgb_for_epoch_{epoch}_idx_{idx}_frame_{i}.png', rgb_raw)
+                #     rgb_std = cur[5:8, :, :]
+                #     rgb_std = rgb_std.detach().cpu().numpy()
+                #     rgb_std = np.transpose(rgb_std, (1, 2, 0))
+                #     rgb_std = (rgb_std - rgb_std.min()) / (rgb_std.max() - rgb_std.min())
+                #     rgb_std = (rgb_std * 255).astype(np.uint8)
+                #     rgb_std = cv2.cvtColor(rgb_std, cv2.COLOR_RGB2BGR)
+                #     cv2.imwrite(f'tof_debug/rgb_5_8/rgb_for_epoch_{epoch}_idx_{idx}_frame_{i}.png', rgb_std)
+
+                #     rgb_norm = cur[10:13, :, :]
+                #     rgb_norm = rgb_norm.detach().cpu().numpy()
+                #     rgb_norm = np.transpose(rgb_norm, (1, 2, 0))
+                #     rgb_norm = (rgb_norm - rgb_norm.min()) / (rgb_norm.max() - rgb_norm.min())
+                #     rgb_norm = (rgb_norm * 255).astype(np.uint8)
+                #     rgb_norm = cv2.cvtColor(rgb_norm, cv2.COLOR_RGB2BGR)
+                #     cv2.imwrite(f'tof_debug/rgb_10_13/rgb_for_epoch_{epoch}_idx_{idx}_frame_{i}.png', rgb_norm)
+                # exit()
                 self.optimizer.zero_grad()
                 pred_ppg = self.model(data)
+                # save the RAW RGB as a image 
+                # rgb_raw = data[:, 0:3, :, :]
+                # rgb_raw = rgb_raw.detach().cpu().numpy()
+                # rgb_raw = rgb_raw[0]
+                # rgb_raw = np.transpose(rgb_raw, (1, 2, 0))
+                # rgb_raw = (rgb_raw - rgb_raw.min()) / (rgb_raw.max() - rgb_raw.min())
+                # rgb_raw = (rgb_raw * 255).astype(np.uint8)
+                # rgb_raw = cv2.cvtColor(rgb_raw, cv2.COLOR_RGB2BGR)
+                # cv2.imwrite(f'rgb_raw_for_epoch_{epoch}_idx_{idx}.png', rgb_raw)
+                # exit()
+                
                 # display the predicted ppg and label ppg
                 # plt.plot(pred_ppg.detach().cpu().numpy(), label='pred_ppg')
                 # plt.plot(labels.detach().cpu().numpy(), label='label_ppg')
@@ -110,6 +150,8 @@ class OmnicanTrainer(BaseTrainer):
                 # plt.savefig(f'pred_ppg_and_label_ppg_{idx}.png')
                 # plt.close()
                 # exit()
+                # Use combined MSE + FFT loss for better rPPG training
+                # loss, mse_loss, fft_loss_val = self.combined_loss(pred_ppg, labels, mse_weight=0.3, fft_weight=0.7)
                 loss = self.criterion(pred_ppg, labels)
                 loss.backward()
 
@@ -120,12 +162,52 @@ class OmnicanTrainer(BaseTrainer):
                 self.scheduler.step()
                 running_loss += loss.item()
                 if idx % 100 == 99:  # print every 100 mini-batches
-                    print(f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
+                    print(f'[{epoch}, {idx + 1:5d}] Combined Loss: {running_loss / 100:.3f}')
+                    # print(f'  MSE Loss: {mse_loss.item():.3f}, FFT Loss: {fft_loss_val.item():.3f}')
                     plt.plot(pred_ppg.detach().cpu().numpy(), label='pred_ppg')
                     plt.plot(labels.detach().cpu().numpy(), label='label_ppg')
                     plt.legend()
                     plt.savefig(f'pred_ppg_and_label_ppg_for_epoch_{epoch}_idx_{idx}.png')
                     plt.close()
+                    
+                    # # display the rgb_raw as a image and save it
+                    # print(f"rgb_raw shape: {data.shape}")
+                    # print(f"Available channels: {data.shape[1]} (0-{data.shape[1]-1})")
+                    
+                    # DiffNormalized RGB: channels 0-3
+                    # rgb_norm_data = data[:, 0:3, :, :]  # Shape: [200, 3, 72, 72]
+                    # rgb_norm_data = rgb_norm_data.detach().cpu().numpy()
+                    # for i in range(rgb_norm_data.shape[0]):
+                    #     # Select the first frame and reshape to [H, W, C] for OpenCV
+                    #     rgb_norm = rgb_norm_data[i]  # Take first frame: [3, 72, 72]
+                    #     rgb_norm = np.transpose(rgb_norm, (1, 2, 0))  # Convert to [72, 72, 3]
+                    #     # save the rgb_norm as a image in debug folder
+                    #     # make the debug folder if not exists
+                    #     if not os.path.exists('debug'):
+                    #         os.makedirs('debug')
+                    #     cv2.imwrite(f'./debug/raw_rgb_norm_for_epoch_{epoch}_idx_{idx}_frame_{i}.png', rgb_norm)
+                        
+                        # # Normalize to 0-255 range for visualization
+                        # rgb_norm = (rgb_norm - rgb_norm.min()) / (rgb_norm.max() - rgb_norm.min())
+                        # rgb_norm = (rgb_norm * 255).astype(np.uint8)
+                        
+                        # # print max and min of rgb_norm
+                        # # print(f"rgb_norm max: {rgb_norm.max()}, rgb_norm min: {rgb_norm.min()}")
+                        
+                        # rgb_norm = cv2.cvtColor(rgb_norm, cv2.COLOR_RGB2BGR)
+                        # cv2.imwrite(f'./debug/rgb_norm_for_epoch_{epoch}_idx_{idx}_frame_{i}.png', rgb_norm)
+                    
+                    # # display the standardized rgb: channels 5-8
+                    # rgb_std = data[:, 5:8, :, :]  # Shape: [200, 3, 72, 72]
+                    # rgb_std = rgb_std.detach().cpu().numpy()
+                    # rgb_std = rgb_std[0]  # Take first frame: [3, 72, 72]
+                    # rgb_std = np.transpose(rgb_std, (1, 2, 0))  # Convert to [72, 72, 3]
+                    # rgb_std = (rgb_std - rgb_std.min()) / (rgb_std.max() - rgb_std.min())
+                    # rgb_std = (rgb_std * 255).astype(np.uint8)
+                    # rgb_std = cv2.cvtColor(rgb_std, cv2.COLOR_RGB2BGR)
+                    # cv2.imwrite(f'rgb_std_for_epoch_{epoch}_idx_{idx}.png', rgb_std)
+                    
+                    # exit()
                     running_loss = 0.0
                 train_loss.append(loss.item())
                 tbar.set_postfix(loss=loss.item())
@@ -173,6 +255,8 @@ class OmnicanTrainer(BaseTrainer):
                 data_valid = data_valid[:(N * D) // self.base_len * self.base_len]
                 labels_valid = labels_valid[:(N * D) // self.base_len * self.base_len]
                 pred_ppg_valid = self.model(data_valid)
+                # Use combined loss for validation too
+                # loss, _, _ = self.combined_loss(pred_ppg_valid, labels_valid, mse_weight=0.3, fft_weight=0.7)
                 loss = self.criterion(pred_ppg_valid, labels_valid)
                 valid_loss.append(loss.item())
                 valid_step += 1
@@ -249,3 +333,70 @@ class OmnicanTrainer(BaseTrainer):
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
         torch.save(self.model.state_dict(), model_path)
         print('Saved Model Path: ', model_path)
+        
+        
+    def fft_loss(self, pred_ppg, labels, fs=20, hr_range=(0.5, 3.0)):
+        """
+        FFT-based loss function for rPPG training.
+        Computes the difference between frequency domain representations using PyTorch.
+        Optionally focuses on heart rate frequency range.
+        
+        Args:
+            pred_ppg: Predicted PPG signal (batch_size, seq_len)
+            labels: Ground truth PPG signal (batch_size, seq_len)
+            fs: Sampling frequency (default: 20 Hz for your data)
+            hr_range: Heart rate range in Hz (min_hr, max_hr)
+        
+        Returns:
+            FFT-based loss value (PyTorch tensor with gradients)
+        """
+        # Ensure inputs are 2D (batch_size, seq_len)
+        if pred_ppg.dim() == 1:
+            pred_ppg = pred_ppg.unsqueeze(0)
+        if labels.dim() == 1:
+            labels = labels.unsqueeze(0)
+            
+        # Compute real FFT (only positive frequencies)
+        pred_fft = torch.fft.rfft(pred_ppg, dim=-1)
+        labels_fft = torch.fft.rfft(labels, dim=-1)
+        
+        # Compute magnitude spectra
+        pred_magnitude = torch.abs(pred_fft)
+        labels_magnitude = torch.abs(labels_fft)
+        
+        # Optionally create frequency mask for heart rate range
+        if hr_range is not None:
+            seq_len = pred_ppg.shape[-1]
+            freqs = torch.fft.rfftfreq(seq_len, 1/fs, device=pred_ppg.device)
+            
+            # Create mask for heart rate range (0.5-3.0 Hz = 30-180 BPM)
+            hr_mask = (freqs >= hr_range[0]) & (freqs <= hr_range[1])
+            
+            # Apply mask to focus on heart rate frequencies
+            pred_magnitude = pred_magnitude * hr_mask
+            labels_magnitude = labels_magnitude * hr_mask
+        
+        # Compute loss as mean absolute difference of magnitude spectra
+        loss = torch.mean(torch.abs(pred_magnitude - labels_magnitude))
+        
+        return loss
+    
+    def combined_loss(self, pred_ppg, labels, mse_weight=0.5, fft_weight=0.5):
+        """
+        Combined MSE and FFT loss for rPPG training.
+        
+        Args:
+            pred_ppg: Predicted PPG signal
+            labels: Ground truth PPG signal
+            mse_weight: Weight for MSE loss
+            fft_weight: Weight for FFT loss
+        
+        Returns:
+            Combined loss value
+        """
+        mse_loss = torch.nn.functional.mse_loss(pred_ppg, labels)
+        fft_loss_val = self.fft_loss(pred_ppg, labels)
+        
+        combined_loss = mse_weight * mse_loss + fft_weight * fft_loss_val
+        
+        return combined_loss, mse_loss, fft_loss_val

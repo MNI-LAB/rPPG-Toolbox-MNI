@@ -30,6 +30,8 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
+# mediapipe
+from classical_methods.face_mesh_module import FaceMeshDetector
 
 class BaseLoader(Dataset):
     """The base class for data loading based on pytorch Dataset.
@@ -65,7 +67,16 @@ class BaseLoader(Dataset):
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
         self.config_data = config_data
+        self.face_mesh_detector = FaceMeshDetector(...)
 
+        # Use:
+        self.face_mesh_detector = None
+        self._face_mesh_config = {
+            'static_image_mode': False,
+            'max_num_faces': 1,
+            'min_detection_confidence': 0.5,
+            'min_tracking_confidence': 0.5
+        }
         # if self.do_preprocess:
             # from dataset.data_loader.face_detector.YOLO5Face import YOLO5Face
             # if 'Y5F' in self.config_data.PREPROCESS.CROP_FACE.BACKEND:
@@ -341,6 +352,38 @@ class BaseLoader(Dataset):
             else:
                 print("ERROR: No Face Detected")
                 face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
+                
+        elif backend == "MP":  # additional Mediapipe face detection
+            # Lazy initialization to avoid pickling issues
+            if self.face_mesh_detector is None:
+                from classical_methods.face_mesh_module import FaceMeshDetector
+                self.face_mesh_detector = FaceMeshDetector(**self._face_mesh_config)
+            
+            # Ensure 3-channel image to detector; frames in toolbox are RGB, detector converts BGR→RGB internally.
+            # So convert RGB→BGR before passing in.
+            frame_rgb = frame[:, :, :3].astype(np.uint8)
+            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+
+            face_detected, landmarks = self.face_mesh_detector.find_face_mesh(frame_bgr, draw=False)
+            if face_detected and landmarks.size > 0:
+                # landmarks: (478, 2) int pixel coords
+                xs = landmarks[:, 0]
+                ys = landmarks[:, 1]
+
+                x_min = max(int(xs.min()), 0)
+                x_max = min(int(xs.max()), frame.shape[1] - 1)
+                y_min = max(int(ys.min()), 0)
+                y_max = min(int(ys.max()), frame.shape[0] - 1)
+
+                # Compute width/height; guard against degenerate boxes
+                w_bb = max(1, x_max - x_min + 1)
+                h_bb = max(1, y_max - y_min + 1)
+
+                face_box_coor = [x_min, y_min, w_bb, h_bb]
+            else:
+                print("ERROR: No Face Detected")
+                face_box_coor = [0, 0, frame.shape[1], frame.shape[0]]
+    
         else:
             raise ValueError("Unsupported face detection backend!")
 
@@ -409,6 +452,14 @@ class BaseLoader(Dataset):
             if resized.ndim == 2:  # grayscale image
                 resized = resized[..., np.newaxis]  # shape (H, W, 1)
             resized_frames[i] = resized
+        
+        # save the RGB frames so first 3 channels as a image in debug folder
+        if not os.path.exists('debug'):
+            os.makedirs('debug')
+        for i in range(0, total_frames):
+            frame = resized_frames[i]
+            cv2.imwrite(f'debug/face_cropped_frames/rgb_frame_{i}.png', frame[:, :, :3])
+        
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):
@@ -480,7 +531,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=15):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=20):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -616,21 +667,58 @@ class BaseLoader(Dataset):
         self.labels = labels
         self.preprocessed_data_len = len(inputs)
 
+    # @staticmethod
+    # def diff_normalize_data(data):
+    #     """Calculate discrete difference in video data along the time-axis and nornamize by its standard deviation."""
+    #     n, h, w, c = data.shape
+
+    #     diffnormalized_len = n - 1
+    #     diffnormalized_data = np.zeros((diffnormalized_len, h, w, c), dtype=np.float32)
+    #     diffnormalized_data_padding = np.zeros((1, h, w, c), dtype=np.float32)
+    #     for j in range(diffnormalized_len):
+    #         diffnormalized_data[j, :, :, :] = (data[j + 1, :, :, :] - data[j, :, :, :]) / (
+    #                 data[j + 1, :, :, :] + data[j, :, :, :] + 1e-7)
+    #     diffnormalized_data = diffnormalized_data / np.std(diffnormalized_data)
+    #     diffnormalized_data = np.append(diffnormalized_data, diffnormalized_data_padding, axis=0)
+    #     diffnormalized_data[np.isnan(diffnormalized_data)] = 0
+    #     return diffnormalized_data
     @staticmethod
     def diff_normalize_data(data):
-        """Calculate discrete difference in video data along the time-axis and nornamize by its standard deviation."""
+        """Calculate discrete difference in video data along the time-axis and normalize by per-channel standard deviation."""
+        # ensure float
+        data = data.astype(np.float32)
         n, h, w, c = data.shape
-        diffnormalized_len = n - 1
-        diffnormalized_data = np.zeros((diffnormalized_len, h, w, c), dtype=np.float32)
-        diffnormalized_data_padding = np.zeros((1, h, w, c), dtype=np.float32)
-        for j in range(diffnormalized_len):
-            diffnormalized_data[j, :, :, :] = (data[j + 1, :, :, :] - data[j, :, :, :]) / (
-                    data[j + 1, :, :, :] + data[j, :, :, :] + 1e-7)
-        diffnormalized_data = diffnormalized_data / np.std(diffnormalized_data)
-        diffnormalized_data = np.append(diffnormalized_data, diffnormalized_data_padding, axis=0)
-        diffnormalized_data[np.isnan(diffnormalized_data)] = 0
-        return diffnormalized_data
 
+        if n < 2:
+            return np.zeros_like(data, dtype=np.float32)
+
+        # compute per-frame normalized difference: (x_{t+1}-x_t)/(x_{t+1}+x_t+eps)
+        eps = 1e-7
+        diff = (data[1:, :, :, :] - data[:-1, :, :, :]) / (data[1:, :, :, :] + data[:-1, :, :, :] + eps)
+
+        # compute per-channel std (over time + spatial dims) and avoid tiny std
+        std = np.std(diff, axis=(0, 1, 2), keepdims=True)  # shape (1,1,1,c)
+        std_eps = 1e-6
+        std = np.maximum(std, std_eps)
+
+        diff = diff / std  # broadcast per-channel
+
+        # append padding frame to restore length n
+        padding = np.zeros((1, h, w, c), dtype=np.float32)
+        diff = np.concatenate([diff, padding], axis=0)
+
+        # replace any non-finite values (inf, -inf, nan)
+        diff[~np.isfinite(diff)] = 0.0
+
+        # display the first 3 RGB channels after diff normalization
+        # if not os.path.exists('tof_debug/diff_normalized_frames'):
+        #     os.makedirs('tof_debug/diff_normalized_frames')
+        # for i in range(n):
+        #     frame = diff[i]
+        #     cv2.imwrite(f'tof_debug/diff_normalized_frames/diffnormalized_frame_{i}.png', frame[:, :, :3] * 255)
+        return diff
+    
+    
     @staticmethod
     def diff_normalize_label(label):
         """Calculate discrete difference in labels along the time-axis and normalize by its standard deviation."""
